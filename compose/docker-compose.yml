@@ -1,0 +1,77 @@
+# FAP-light + FAP-LDP — profil light (1 VM). Orchestré par ./deploy.sh (ne pas lancer à la main).
+# Variables : .env (voir .env.example). DEPLOY_DIR = dossier de déploiement (config/, sql/ custom).
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PG_ADMIN_PASSWORD:-postgres}
+      # les mots de passe des rôles applicatifs sont posés par les migrations via ALTER ROLE
+      # (les rôles sont NOLOGIN ; les logins des pools sont créés par le déploiement et rattachés)
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro   # rempli par deploy.sh (ordre: cœur → fap-ldp → custom)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  orce:
+    image: nodered/node-red:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FLOWS: /data/flows/flows.json
+      # connexions PG par rôle (les secrets viennent de .env)
+      PG_GATE_DSN: "postgres://gate:${PG_GATE_PASSWORD}@postgres:5432/fap"
+      PG_APP_DSN:  "postgres://app:${PG_APP_PASSWORD}@postgres:5432/fap"
+      PG_READER_DSN: "postgres://reader:${PG_READER_PASSWORD}@postgres:5432/fap"
+      # config du nœud fap-ldp lue au boot (modèle métier, extensions, base IRI)
+      FAP_LDP_CONFIG: /config/model.json
+      FAP_LDP_BASE_IRI: "https://${DOMAIN}/"
+      IDP_ISSUER_URL: "${IDP_EXTERNAL:-false}" # si IdP externe (étape 1)
+    volumes:
+      - orce-data:/data                              # flows + palette (node-red-contrib-fap-ldp installé au boot)
+      - ./flows:/data/flows:ro                       # flows cœur FAP + flows LDP
+      - ${DEPLOY_DIR:-./deploy}/config:/config:ro    # model.json, sources.yml, fap-ldp-values.yml
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      KC_HOSTNAME: "https://${DOMAIN}/auth"
+      KC_HTTP_ENABLED: "false"
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    volumes:
+      - ./keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+    command: start --import-realm
+    # exposé uniquement en interne (caddy fait le TLS) ; healthcheck interne
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
+      interval: 5s
+      retries: 30
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - orce
+      - keycloak
+
+volumes:
+  pgdata:
+  orce-data:
+  caddy-data:
+  caddy-config:
