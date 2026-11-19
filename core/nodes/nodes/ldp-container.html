@@ -1,0 +1,53 @@
+<script type="text/javascript">
+RED.nodes.registerType('fap-ldp-container', {
+  category: 'FAP-LDP',
+  color: '#C0DEED',
+  defaults: {
+    name: { value: 'LDP' },
+    baseIri: { value: 'http://localhost:1880/' },
+    podOrg: { value: '' },
+    catalogPath: { value: '/dsp/catalogue' },
+    pdp: { value: '', type: 'fap-ldp-pdp', required: true },
+    idpUserinfoUrl: { value: '' },
+    devTokens: { value: '' },
+    pgHost: { value: '127.0.0.1' },
+    pgPort: { value: '5432' },
+    pgDatabase: { value: 'postgres' },
+    pgUser: { value: 'app' },
+    pgPassword: { value: '' },
+    pgPoolMax: { value: '5' },
+    pgReaderUser: { value: '' },
+    pgReaderPassword: { value: '' }
+  },
+  label: function () { return this.name || 'LDP'; },
+  inputs: 0,
+  outputs: 0
+});
+</script>
+<script type="text/html" data-template-name="fap-ldp-container">
+  <div class="form-row"><label>Nom</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label>Base IRI</label><input type="text" id="node-input-baseIri"></div>
+  <div class="form-row"><label>Org interne (claim org)</label><input type="text" id="node-input-podOrg"></div>
+  <div class="form-row"><label>Catalogue DSP (Link rel="catalog")</label><input type="text" id="node-input-catalogPath"></div>
+  <div class="form-row"><label>Nœud PDP</label><input type="text" id="node-input-pdp"></div>
+  <div class="form-row"><label>IdP userinfo URL (OIDC)</label><input type="text" id="node-input-idpUserinfoUrl"></div>
+  <div class="form-row"><label>devTokens (JSON, test/TCK)</label><input type="text" id="node-input-devTokens"></div>
+  <hr>
+  <div class="form-row"><label>PG host</label><input type="text" id="node-input-pgHost"></div>
+  <div class="form-row"><label>PG port</label><input type="text" id="node-input-pgPort"></div>
+  <div class="form-row"><label>PG base</label><input type="text" id="node-input-pgDatabase"></div>
+  <div class="form-row"><label>PG user (rôle app, écritures app.*)</label><input type="text" id="node-input-pgUser"></div>
+  <div class="form-row"><label>PG password</label><input type="password" id="node-input-pgPassword"></div>
+  <div class="form-row"><label>Pool max</label><input type="text" id="node-input-pgPoolMax"></div>
+  <div class="form-row"><label>PG reader user (lectures gold, optionnel)</label><input type="text" id="node-input-pgReaderUser"></div>
+  <div class="form-row"><label>PG reader password</label><input type="password" id="node-input-pgReaderPassword"></div>
+</script>
+<script type="text/html" data-help-name="fap-ldp-container">
+  <p>Nœud conteneur LDP (PEP) FAP-LDP — spec fap-ldp v0.2 §6. Endpoint LDP/JSON-LD servi par ORCE
+  (derrière caddy en 443) : GET/POST/PUT/DELETE/PATCH sur ressources et BasicContainers,
+  <code>GET/PUT &lt;res&gt;.acl</code> (WebACL ⇄ <code>auth.acl</code>), ETag + If-Match/If-None-Match
+  (304/412), PATCH = JSON Merge Patch (RFC 7386), erreurs JSON-LD <code>dspace:Error</code>.</p>
+  <p>Chemins hors LDP (<code>/dsp/*</code>, <code>/red*</code>, <code>/editor*</code>) sont laissés
+  au cœur FAP. Mapping conteneur↔table via <code>dsp.asset_mapping</code> ; contrôle d'accès délégué
+  au nœud PDP (contrat DSP + ACL, RLS en PG).</p>
+</script>

@@ -1,0 +1,14 @@
+[
+ {"id":"tab1","type":"tab","label":"FAP-LDP","disabled":false},
+ {"id":"model1","type":"fap-ldp-model","z":"tab1","name":"model","modelPath":"/data/model.json",
+  "pgHost":"pg","pgPort":"5432","pgDatabase":"fap","pgUser":"postgres","pgPassword":"postgres","pgPoolMax":"2",
+  "x":100,"y":100,"wires":[]},
+ {"id":"pdp1","type":"fap-ldp-pdp","z":"tab1","name":"PDP","baseIri":"http://localhost:18880/","podOrg":"facis-pod","cacheTtlMs":"3600000",
+  "pgHost":"pg","pgPort":"5432","pgDatabase":"fap","pgUser":"app_rw","pgPassword":"app","pgPoolMax":"5",
+  "x":320,"y":100,"wires":[]},
+ {"id":"ldp1","type":"fap-ldp-container","z":"tab1","name":"LDP","baseIri":"http://localhost:18880/","podOrg":"facis-pod","catalogPath":"/dsp/catalogue",
+  "pdp":"pdp1",
+  "devTokens":"{\"tok-alice\":{\"webid\":\"http://localhost:18880/users/1\",\"role\":\"gestionnaire\",\"org\":\"facis-pod\"},\"tok-bob\":{\"webid\":\"http://localhost:18880/users/2\",\"role\":\"technicien\",\"org\":\"facis-pod\"},\"tok-ext\":{\"did\":\"did:web:partner.example\"}}",
+  "pgHost":"pg","pgPort":"5432","pgDatabase":"fap","pgUser":"app_rw","pgPassword":"app","pgPoolMax":"5",
+  "x":540,"y":100,"wires":[]}
+]
