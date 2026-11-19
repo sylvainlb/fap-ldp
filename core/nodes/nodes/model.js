@@ -45,7 +45,7 @@ module.exports = function (RED) {
       if (chk) return `${chk[1].trim()} CHECK (${name} IN ${chk[2]})`;
       const fk = d.match(/^(\S+)\s+\bfk\s+(\w+)\((\w+)\)$/i);
       if (fk) return `${fk[1]} REFERENCES app.${fk[2]}(${fk[3]})`;
-      d = d.replace(/\s*\([^)]*\)\s*$/, ''); // commentaire final entre parenthèses
+      d = d.replace(/ \([^)]*\)\s*$/, ''); // commentaire final (espace avant la parenthèse) ; now() conservé
       return d;
     }
 
@@ -64,7 +64,7 @@ module.exports = function (RED) {
       const has = (f) => spec.fields && spec.fields[f];
       const stmts = [];
       if (has('updated_at')) stmts.push(
-        `CREATE TRIGGER set_updated_at BEFORE UPDATE ON app.${table}
+        `CREATE TRIGGER set_updated_at BEFORE INSERT OR UPDATE ON app.${table}
          FOR EACH ROW EXECUTE FUNCTION app.set_updated_at()`);
       stmts.push(
         `CREATE TRIGGER versioning AFTER INSERT OR UPDATE ON app.${table}

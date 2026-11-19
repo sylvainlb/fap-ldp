@@ -7,7 +7,7 @@
       "fields": {
         "id": "bigserial", "webid": "text unique not null", "name": "text not null",
         "email": "text unique", "role": "text check in ('gestionnaire','technicien','admin')",
-        "created_at": "timestamptz", "updated_at": "timestamptz"
+        "created_at": "timestamptz default now()", "updated_at": "timestamptz default now()"
       }
     },
     "buildings": {
@@ -15,7 +15,7 @@
       "fields": {
         "id": "bigserial", "name": "text not null", "address": "text",
         "meter_id": "text", "facis_asset": "text (IRI asset catalogue DSP)",
-        "created_at": "timestamptz", "updated_at": "timestamptz"
+        "created_at": "timestamptz default now()", "updated_at": "timestamptz default now()"
       }
     },
     "tickets": {
@@ -27,7 +27,7 @@
         "priority": "text", "building_id": "bigint fk buildings(id)",
         "anomaly_ref": "text (IRI ligne gold)",
         "created_by": "bigint fk users(id)", "assigned_to": "bigint fk users(id)",
-        "created_at": "timestamptz", "updated_at": "timestamptz", "deleted_at": "timestamptz"
+        "created_at": "timestamptz default now()", "updated_at": "timestamptz default now()", "deleted_at": "timestamptz"
       }
     },
     "comments": {
@@ -35,7 +35,7 @@
       "parent": "tickets", "parent_fk": "ticket_id",
       "fields": {
         "id": "bigserial", "ticket_id": "bigint fk tickets(id)", "author": "bigint fk users(id)",
-        "text": "text not null", "ts": "timestamptz"
+        "text": "text not null", "ts": "timestamptz default now()"
       }
     }
   }

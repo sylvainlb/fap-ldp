@@ -1,4 +1,4 @@
--- 004_app.sql — DDL du domaine app.* (spec fap§app v0.2 §5.1) + versioning, tombstones, outbox (§5.2/§5.3)
+-- 004_app.sql — DDL du domaine app.* (spec fap-ldp v0.2 §5.1) + versioning, tombstones, outbox (§5.2/§5.3)
 -- Modèle issu de la spec supervision §4.1 (User, Building, Ticket, Comment).
 
 CREATE TABLE IF NOT EXISTS app.users (

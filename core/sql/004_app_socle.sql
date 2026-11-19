@@ -1,6 +1,6 @@
--- 004_app_socle.sql — Socle générique du domaine app.* (spec fap§app v0.2 §5.2/§5.3)
+-- 004_app_socle.sql — Socle générique du domaine app.* (spec fap-ldp v0.2 §5.2/§5.3)
 -- Ce fichier ne contient AUCUN modèle métier : les tables app.<table> sont créées au boot
--- par le nœud fap§app à partir de config/model.json du déploiement (exemple : examples/supervision/).
+-- par le nœud fap-ldp à partir de config/model.json du déploiement (exemple : examples/supervision/).
 -- Ici uniquement les tables et fonctions génériques, valables pour tout modèle.
 
 -- Historique des versions (PUT/PATCH = nouvelle version)
@@ -36,11 +36,16 @@ CREATE TABLE IF NOT EXISTS app.outbox (
 );
 CREATE INDEX IF NOT EXISTS outbox_pending_idx ON app.outbox (id) WHERE processed_at IS NULL;
 
--- Fonctions trigger génériques. Le nœud fap§app pose les triggers sur chaque table app.<table>
+-- Fonctions trigger génériques. Le nœud fap-ldp pose les triggers sur chaque table app.<table>
 -- déclarée dans model.json (set_updated_at / versioning / tombstone / outbox).
+-- INSERT : renseigne updated_at si absent (défaut) ; UPDATE : systématique
 CREATE OR REPLACE FUNCTION app.set_updated_at() RETURNS trigger AS $$
 BEGIN
-  NEW.updated_at := now();
+  IF TG_OP = 'INSERT' AND NEW.updated_at IS NULL THEN
+    NEW.updated_at := now();
+  ELSIF TG_OP = 'UPDATE' THEN
+    NEW.updated_at := now();
+  END IF;
   RETURN NEW;
 END $$ LANGUAGE plpgsql;
 

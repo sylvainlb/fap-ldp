@@ -1,8 +1,8 @@
--- 005_rls.sql — Conventions RLS génériques (spec fap§app v0.2 §7.2)
+-- 005_rls.sql — Conventions RLS génériques (spec fap-ldp v0.2 §7.2)
 -- auth.can() est définie dans 002_auth.sql.
 --
 -- Les policies RLS par table app.<table> NE SONT PAS dans ce fichier : elles sont créées au boot
--- par le nœud fap§app pour chaque table déclarée dans config/model.json du déploiement
+-- par le nœud fap-ldp pour chaque table déclarée dans config/model.json du déploiement
 -- (FORCE ROW LEVEL SECURITY + policies read/write via auth.can, IRI depuis app.base_iri).
 -- Exemple complet : examples/supervision/005_rls.sql.
 --

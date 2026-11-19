@@ -1,5 +1,5 @@
 -- 003_dsp.sql — schémas dsp.* : contrats, capacités, audit, mapping asset ↔ conteneur
--- (spec fap§app v0.2 §7.2, §6). La négociation DSP elle-même reste dans le cœur FAP
+-- (spec fap-ldp v0.2 §7.2, §6). La négociation DSP elle-même reste dans le cœur FAP
 -- (dsp-control-plane-api v1) ; FAP-LDP consulte/écrit cet état.
 
 CREATE TABLE IF NOT EXISTS dsp.contracts (

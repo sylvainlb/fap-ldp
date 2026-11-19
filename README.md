@@ -2,10 +2,10 @@
 
 Dépôt du composant **FAP-LDP** : extension indépendante du cœur FAP (FAP-light ou FAP-full) apportant
 le domaine applicatif `app.*` transactionnel, un endpoint LDP/JSON-LD unique (conteneurs gold + `app.*`)
- dans le même runtime ORCE (package `node-red-contrib-fap§app`), et le contrôle d'accès unifié
+ dans le même runtime ORCE (package `node-red-contrib-fap-ldp`), et le contrôle d'accès unifié
 (contrat DSP + ACL par ressource, PDP partagé avec le data plane DSP).
 
-- **Spécification** : `../spec/fap§app-spec.md` (version 0.2 — décisions A–E intégrées)
+- **Spécification** : `../spec/fap-ldp-spec.md` (version 0.2 — décisions A–E intégrées)
 - **Cœur FAP** : dépôt `../fap-light-serveur/` (spec `../spec/fap-light-spec-serveur.md` v0.2, décisions D-1..D-6)
 - **Coutures cœur** : cible `fap-core-contracts: v1.0` (à créer côté cœur, `contracts/` du dépôt fap-light-serveur)
 - **Références** : synthèse d'architecture FAP (`../spec/facis-fap-architecture-synthese.md`, §3, §4.1, §4.5),
@@ -19,10 +19,10 @@ Le FAP-LDP **ne modifie pas** le cœur FAP : il dépend des coutures stables ver
 ## Contenu du dépôt (layout monorepo léger, spec §4)
 
 ```
-fap§app/
+fap-ldp/
 ├── README.md                  ← ce fichier
 ├── core/                      ← E1+E2+E3 — requis, API/hooks stables, rétrocompatibles
-│   ├── nodes/                 ← package node-red-contrib-fap§app (nœud conteneur LDP/PEP, nœud PDP)
+│   ├── nodes/                 ← package node-red-contrib-fap-ldp (nœud conteneur LDP/PEP, nœud PDP)
 │   ├── sql/                   ← socle générique UNIQUEMENT : rôles, auth.acl/auth.can, dsp.*, app.versions/tombstones/outbox, maintenance (pas de modèle métier)
 │   └── tck/                   ← conformité W3C LDP (app-tests) + tests PDP/ACL
 ├── examples/                  ← modèles métier d'exemple (ex. supervision/ : model.json + SQL), appliqués au boot par le nœud
@@ -34,8 +34,9 @@ fap§app/
 │   ├── federation/ (E8)
 │   └── store-rdf/  (E10)
 ├── contracts/                 ← dépendance versionnée : fap-core-contracts v1.0
-├── compose/                   ← install FAP-light (1 VM) : ORCE + package fap§app + PG + caddy + Keycloak embarqué
-├── charts/fap§app/            ← install FAP-medium/full (K8s) : même endpoint public (443, routing / → LDP, /dsp/* → cœur)
+├── compose/                   ← install FAP-light (1 VM) : ORCE + package fap-ldp + PG + caddy + Keycloak embarqué
+│                              │   → guide pas à pas (from scratch, local/prod) : compose/README.md
+├── charts/fap-ldp/            ← install FAP-medium/full (K8s) : même endpoint public (443, routing / → LDP, /dsp/* → cœur)
 └── tck/                       ← matrice de compatibilité core × ext + tests d'intégration
 ```
 

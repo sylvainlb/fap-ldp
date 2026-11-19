@@ -23,14 +23,14 @@ ck "alice POST /tickets/ → 201" 201 "$c"
 loc=$(grep -i '^Location:' /tmp/h | tr -d '\r' | awk '{print $2}')
 echo "  Location: $loc"
 g=$(code -H "$A" $B/tickets/37); ck "alice GET /tickets/37 → 200" 200 "$g"
-curl -s -D /tmp/h -o /dev/null -H "$A" $B/tickets/37; etag=$(grep -i "^ETag:" /tmp/h | tr -d "\r" | cut -d" " -f2); echo "  etag=$etag"; ck "GET Location → 200 (CA-L1)" 200 "$(code -H "$A" "$loc")"
+curl -s -D /tmp/h -o /dev/null -H "$A" $B/tickets/37; etag=$(grep -i "^ETag:" /tmp/h | head -1 | tr -d "\r" | cut -d" " -f2); echo "  etag=$etag"; ck "GET Location → 200 (CA-L1)" 200 "$(code -H "$A" "$loc")"
 # 5. ETag / If-Match → 412 si obsolète (CA-L10)
 ck "PUT If-Match obsolète → 412" 412 "$(code -X PUT -H "$A" -H 'Content-Type: application/ld+json' -H 'If-Match: W/"0000"' -d '{"app_tickets:title":"T37b","app_tickets:building_id":1}' $B/tickets/37)"
 ck "PUT If-Match courant → 200" 200 "$(code -X PUT -H "$A" -H 'Content-Type: application/ld+json' -H "If-Match: $etag" -d '{"app_tickets:title":"T37b","app_tickets:building_id":1}' $B/tickets/37)"
 # 6. PATCH merge patch → 200
 ck "PATCH /tickets/37 → 200" 200 "$(code -X PATCH -H "$A" -H 'Content-Type: application/merge-patch+json' -d '{"app_tickets:status":"IN_PROGRESS"}' $B/tickets/37)"
 # 7. DELETE → 204, puis GET → 404
-curl -s -D /tmp/h -o /dev/null -H "$A" $B/tickets/37; etag=$(grep -i "^ETag:" /tmp/h | tr -d "\r" | cut -d" " -f2)
+curl -s -D /tmp/h -o /dev/null -H "$A" $B/tickets/37; etag=$(grep -i "^ETag:" /tmp/h | head -1 | tr -d "\r" | cut -d" " -f2)
 ck "DELETE /tickets/37 → 204" 204 "$(code -X DELETE -H "$A" -H "If-Match: $etag" $B/tickets/37)"
 ck "GET après DELETE → 404" 404 "$(code -H "$A" $B/tickets/37)"
 # 8. .acl round-trip (CA-L6) sur /buildings/2.acl
@@ -59,10 +59,19 @@ ck "ext GET /buildings/1 avec ACL → 200 (CA-L4)" 200 "$(code -H "$E" $B/buildi
 ck "ext GET /buildings/2 → 403 (CA-L5 ODRL isAnyOf [1])" 403 "$(code -H "$E" $B/buildings/2)"
 # 11. conteneur non publié → 403 externe (CA-L7)
 ck "ext GET /tickets/37 → 403 (CA-L7)" 403 "$(code -H "$E" $B/tickets/37)"
-# 12. gold via LDP (interne)
-ck "alice GET /gold/city_dashboard_summary/ → 200" 200 "$(code -H "$A" $B/gold/city_dashboard_summary/)"
-grep -q 'ldp:contains' /tmp/body && ck "conteneur gold avec ldp:contains" ok ok || ck "conteneur gold ldp:contains" ok "manquant"
+# 12. gold via LDP (interne) ; garde §6.7 : goldMaxRows=1 dans la fixture → conteneur 403, ressource OK
+ck "alice GET /gold/.../ (garde volumétrie §6.7) → 403" 403 "$(code -H "$A" $B/gold/city_dashboard_summary/)"
+grep -q 'GoldContainerTooLarge' /tmp/body && ck "erreur dspace GoldContainerTooLarge" ok ok || ck "erreur GoldContainerTooLarge" ok "manquant"
 ck "alice GET /gold/city_dashboard_summary/1 → 200" 200 "$(code -H "$A" $B/gold/city_dashboard_summary/1)"
+# 13. CA-L12 (décision J) : slash final toléré
+ck "GET /tickets/370/ (slash final) ≡ /tickets/370 → 200" 200 "$(code -H "$A" $B/tickets/370/)"
+# 14. CA-L11 : clé inline permissions
+ck "GET /tickets/370 contient permissions.view=true" ok "$(curl -s -H "$A" $B/tickets/370 | grep -q '"permissions"' && grep -q '"view":true' /tmp/body 2>/dev/null; curl -s -H "$A" $B/tickets/370 | python3 -c 'import json,sys; d=json.load(sys.stdin); print("ok" if d["permissions"]["view"] and d["permissions"]["change"] else "ko")')"
+# 15. CA-L10 (décision F) : PATCH JSON Patch RFC 6902
+ck "PATCH json-patch (RFC 6902) → 200" 200 "$(code -X PATCH -H "$A" -H 'Content-Type: application/json-patch+json' -d '[{"op":"replace","path":"/app_tickets:status","value":"RESOLVED"}]' $B/tickets/370)"
+curl -s -H "$A" $B/tickets/370 | grep -q RESOLVED && ck "status=RESOLVED après json-patch" ok ok || ck "status RESOLVED" ok "manquant"
+# 16. CA-L13 (décision H) : webid déréférençable → /users/1
+ck "GET /users/1 (profil webid) → 200" 200 "$(code -H "$A" $B/users/1)"
 # audit
 n=$($PGC -t -c "SELECT count(*) FROM dsp.audit WHERE decision='allow' AND agreement_id='agr-1'")
 [ "$n" -ge 1 ] && ck "audit agr-1 présent (CA-L4)" ok ok || ck "audit agr-1" ok "$n"

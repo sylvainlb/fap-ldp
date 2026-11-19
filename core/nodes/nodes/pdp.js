@@ -113,6 +113,33 @@ module.exports = function (RED) {
     return { allow: true, status: 200, agreementId: contract.agreement_id, obligations: obligations.constraints };
   };
 
+  // CA-L11 : clé inline `permissions` pour le demandeur (compatibilité solid-ac-checker de sib-core).
+  // view=read(ressource), add=write(conteneur), change/delete=write(ressource), control=control(ressource).
+  PdpNode.prototype.permissions = async function ({ claims, resourceUri, containerUri }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SELECT set_config('app.base_iri', $1, true)", [this.baseIri]);
+      const webid = claims.webid || claims.did;
+      if (webid) await client.query("SELECT set_config('app.webid', $1, true)", [webid]);
+      if (claims.role) await client.query("SELECT set_config('app.role', $1, true)", [claims.role]);
+      const r = await client.query(
+        `SELECT auth.can($1, 'read') AS view,
+                auth.can($2, 'write') AS add,
+                auth.can($1, 'write') AS change,
+                auth.can($1, 'write') AS "delete",
+                auth.can($1, 'control') AS control`,
+        [resourceUri, containerUri]);
+      await client.query('COMMIT');
+      return r.rows[0];
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+    }
+  };
+
   PdpNode.prototype._audit = function (agreementId, webid, resourceUri, mode, decision) {
     return this.pool.query(
       'INSERT INTO dsp.audit (agreement_id, webid, resource_uri, mode, decision) VALUES ($1,$2,$3,$4,$5)',

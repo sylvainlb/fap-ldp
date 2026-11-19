@@ -10,6 +10,7 @@ const { createPool, withSession } = require('../lib/pgpool');
 const jsonld = require('../lib/jsonld');
 const webacl = require('../lib/webacl');
 const mergePatch = require('../lib/mergepatch');
+const jsonPatch = require('../lib/jsonpatch');
 
 module.exports = function (RED) {
   function LdpContainerNode(config) {
@@ -26,6 +27,7 @@ module.exports = function (RED) {
     node.pdp = RED.nodes.getNode(config.pdp);
     node.devTokens = safeJson(config.devTokens); // test/TCK uniquement : token → claims
     node.idpUserinfoUrl = config.idpUserinfoUrl || '';
+    node.goldMaxRows = parseInt(config.goldMaxRows || '10000', 10); // décision G : garde volumétrie gold
     node.mappings = null;      // cache dsp.asset_mapping
     node.mappingsAt = 0;
     node.columns = {};         // cache colonnes par schema.table
@@ -145,7 +147,8 @@ module.exports = function (RED) {
             return { kind: 'container', mapping: m, params, resourcePath: path, containerPath: path, isAcl };
           }
         }
-        return { kind: 'notfound', resourcePath: path, isAcl };
+        // tolérance slash final (CA-L12, décision J) : /tickets/482/ ≡ /tickets/482
+        path = path.slice(0, -1);
       }
       // ressource : plus long préfixe de conteneur correspondant
       for (const m of [...mappings].sort((a, b) => b.container_uri.length - a.container_uri.length)) {
@@ -195,6 +198,7 @@ module.exports = function (RED) {
         const mappings = await getMappings();
         const published = mappings.filter(m => m.published).map(m => node.baseIri + m.container_uri.replace(/^\//, ''));
         const doc = jsonld.containerDoc(node.baseIri, '/', published);
+        doc.permissions = await node.pdp.permissions({ claims, resourceUri: node.baseIri, containerUri: node.baseIri }).catch(() => null);
         res.set('Link', '<' + node.catalogPath + '>; rel="catalog"');
         return sendJsonLd(res, 200, doc);
       }
@@ -231,6 +235,14 @@ module.exports = function (RED) {
       });
       if (!decision.allow) return sendError(res, decision.status || 403, 'Forbidden', decision.reason);
 
+      // CA-L11 (décision J) : clé inline `permissions` calculée pour le demandeur
+      const perms = await node.pdp.permissions({
+        claims,
+        resourceUri: decisionTarget,
+        containerUri: node.baseIri + parsed.containerPath.replace(/^\//, '')
+      }).catch(() => null);
+      parsed.perms = perms;
+
       const headers = {
         Link: '<' + aclUri + '>; rel="acl", <http://www.w3.org/ns/ldp#Resource>; rel="type"'
       };
@@ -245,6 +257,15 @@ module.exports = function (RED) {
     async function handleContainer(req, res, method, parsed, claims, headers) {
       const m = parsed.mapping;
       if (method === 'GET') {
+        // décision G (spec §6.7) : un conteneur gold volumineux n'est PAS servi en LDP brut
+        if (m.table_schema === 'gold' && node.goldMaxRows) {
+          const cnt = await withSession(poolFor(m), claims, node.baseIri, async client =>
+            (await client.query(`SELECT count(*)::int AS n FROM ${m.table_schema}.${m.table_name}`)).rows[0].n);
+          if (cnt > node.goldMaxRows) {
+            return sendError(res, 403, 'GoldContainerTooLarge',
+              `conteneur gold volumineux (${cnt} lignes) : lire via le data plane DSP (/dsp/data, from/to, LIMIT 5000) — spec §6.7`);
+          }
+        }
         const rows = await withSession(poolFor(m), claims, node.baseIri, async client => {
           let q = `SELECT to_jsonb(t) AS doc FROM ${m.table_schema}.${m.table_name} t`;
           const cond = [];
@@ -268,6 +289,7 @@ module.exports = function (RED) {
             return r.doc[name] !== undefined ? r.doc[name] : r.doc[pk];
           }));
         const doc = jsonld.containerDoc(node.baseIri, parsed.containerPath, members);
+        if (parsed.perms) doc.permissions = parsed.perms;
         res.set('Link', headers.Link);
         return sendJsonLd(res, 200, doc);
       }
@@ -324,7 +346,9 @@ module.exports = function (RED) {
         }
         res.set('ETag', etag);
         res.set('Link', headers.Link);
-        return sendJsonLd(res, 200, jsonld.resourceDoc(node.baseIri, parsed.containerPath, m.table_schema, m.table_name, row.doc, pk));
+        const doc = jsonld.resourceDoc(node.baseIri, parsed.containerPath, m.table_schema, m.table_name, row.doc, pk);
+        if (parsed.perms) doc.permissions = parsed.perms;
+        return sendJsonLd(res, 200, doc);
       }
 
       // PUT / PATCH / DELETE : If-Match → 412 si ETag obsolète (CA-L10)
@@ -354,11 +378,13 @@ module.exports = function (RED) {
           const row = jsonld.docToRow(body, m.table_schema, m.table_name);
           nextDoc = { ...current.doc, ...row };
         } else {
-          // PATCH = JSON Merge Patch (RFC 7386), annoncé via Accept-Patch
-          res.set('Accept-Patch', 'application/merge-patch+json');
-          const patch = asJson(req);
-          const merged = mergePatch(stripContext(current.doc, m), patch);
-          const row = jsonld.docToRow(merged, m.table_schema, m.table_name);
+          // PATCH v1 accepte JSON Merge Patch (RFC 7386) ET JSON Patch (RFC 6902) — décision F (CA-L10)
+          res.set('Accept-Patch', 'application/merge-patch+json, application/json-patch+json');
+          const ct = String(req.headers['content-type'] || '');
+          const body = asJson(req);
+          const ld = jsonld.resourceDoc(node.baseIri, parsed.containerPath, m.table_schema, m.table_name, current.doc, pk);
+          const patched = /json-patch/.test(ct) ? jsonPatch.apply(ld, body) : mergePatch(ld, body);
+          const row = jsonld.docToRow(patched, m.table_schema, m.table_name);
           nextDoc = { ...current.doc, ...row };
         }
         delete nextDoc.deleted_at;
@@ -377,7 +403,9 @@ module.exports = function (RED) {
         });
         res.set('ETag', etagOf(updated.doc));
         res.set('Link', headers.Link);
-        return sendJsonLd(res, 200, jsonld.resourceDoc(node.baseIri, parsed.containerPath, m.table_schema, m.table_name, updated.doc, pk));
+        const doc = jsonld.resourceDoc(node.baseIri, parsed.containerPath, m.table_schema, m.table_name, updated.doc, pk);
+        if (parsed.perms) doc.permissions = parsed.perms;
+        return sendJsonLd(res, 200, doc);
       }
       return sendError(res, 405, 'MethodNotAllowed', method);
     }

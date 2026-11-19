@@ -32,13 +32,15 @@ BASE=http://localhost:18880 ./core/tck/e2e-smoke.sh
 ```
 
 Couverture : 401 sans token · CA-L1 (POST→201+Location, read-after-write) · CA-L3 (ACL ressource vs
-conteneur, 403) · CA-L10 (If-Match → 412, PUT/PATCH → version) · DELETE → tombstone → 404 ·
-CA-L6 (GET/PUT `.acl` WebACL ⇄ `auth.acl`, effet immédiat) · racine = conteneurs publiés seuls ·
-CA-L4 (externe : contrat sans ACL → 403, avec DID dans l'ACL → 200 + audit `agreement_id`) ·
-CA-L5 (ODRL `facis:resourceId isAnyOf`) · CA-L7 (conteneur non publié → 403 externe) ·
-conteneurs gold en LDP.
+conteneur, 403) · CA-L10 (If-Match → 412, PUT/PATCH → version, Merge Patch RFC 7386 **et**
+JSON Patch RFC 6902) · DELETE → tombstone → 404 · CA-L6 (GET/PUT `.acl` WebACL ⇄ `auth.acl`,
+effet immédiat) · racine = conteneurs publiés seuls · CA-L4 (externe : contrat sans ACL → 403,
+avec DID dans l'ACL → 200 + audit `agreement_id`) · CA-L5 (ODRL `facis:resourceId isAnyOf`) ·
+CA-L7 (conteneur non publié → 403 externe) · CA-L11 (`permissions` inline) · CA-L12 (slash final)
+· CA-L13 (`/users/<pk>` déréférençable) · garde volumétrie gold §6.7 (403 `GoldContainerTooLarge`) ·
+ressources gold en LDP.
 
-Dernier run : **27 PASS, 0 FAIL** (2026-11-19, postgres:16-alpine + fap-light-orce, Node-RED 4.0.9).
+Dernier run : **32 PASS, 0 FAIL** (2026-11-19, postgres:16-alpine + fap-light-orce, Node-RED 4.0.9), couvrant CA-L1..L7, L10 (Merge Patch + JSON Patch), L11 (`permissions` inline), L12 (slash final), L13 (webid déréférençable) et la garde volumétrie gold §6.7.
 
 ## À venir
 

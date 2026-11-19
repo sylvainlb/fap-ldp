@@ -1,7 +1,10 @@
 CORE_DIR ?= ../fap-light-serveur
+# Dossier de déploiement (config/, sql/ custom, .env) — HORS du dépôt recommandé :
+#   make deploy DEPLOY_DIR=~/mon-serveur ENV_FILE=~/mon-serveur/.env
 DEPLOY_DIR ?= $(CURDIR)/deploy
+ENV_FILE ?= $(DEPLOY_DIR)/.env
 
-export CORE_DIR DEPLOY_DIR
+export CORE_DIR DEPLOY_DIR ENV_FILE
 
 .PHONY: deploy test backup logs down update status
 

@@ -1,5 +1,5 @@
 -- 001_roles_schemas.sql — rôles PG et schémas de l'extension FAP-LDP
--- Spec fap§app v0.2 §2 (principe 6) et §7.5. Idempotent. Exécuter en tant que admin (migrations).
+-- Spec fap-ldp v0.2 §2 (principe 6) et §7.5. Idempotent. Exécuter en tant que admin (migrations).
 --
 -- Le cœur FAP (schémas bronze/silver/gold, rôle gate) est installé par fap-light-serveur ;
 -- ce fichier n'en dépend pas et ne le modifie pas.

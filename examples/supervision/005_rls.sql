@@ -1,4 +1,4 @@
--- 005_rls.sql — RLS sur app.* (spec fap§app v0.2 §7.2)
+-- 005_rls.sql — RLS sur app.* (spec fap-ldp v0.2 §7.2)
 -- Le PEP fait, dans la transaction : SET LOCAL app.webid / app.role / app.base_iri
 -- depuis les claims du token (jamais depuis la query string).
 -- FORCE ROW LEVEL SECURITY : même le owner des tables est filtré.

@@ -17,7 +17,8 @@ RED.nodes.registerType('fap-ldp-container', {
     pgPassword: { value: '' },
     pgPoolMax: { value: '5' },
     pgReaderUser: { value: '' },
-    pgReaderPassword: { value: '' }
+    pgReaderPassword: { value: '' },
+    goldMaxRows: { value: '10000' }
   },
   label: function () { return this.name || 'LDP'; },
   inputs: 0,
@@ -41,6 +42,7 @@ RED.nodes.registerType('fap-ldp-container', {
   <div class="form-row"><label>Pool max</label><input type="text" id="node-input-pgPoolMax"></div>
   <div class="form-row"><label>PG reader user (lectures gold, optionnel)</label><input type="text" id="node-input-pgReaderUser"></div>
   <div class="form-row"><label>PG reader password</label><input type="password" id="node-input-pgReaderPassword"></div>
+  <div class="form-row"><label>Gold max rows (garde §6.7)</label><input type="text" id="node-input-goldMaxRows"></div>
 </script>
 <script type="text/html" data-help-name="fap-ldp-container">
   <p>Nœud conteneur LDP (PEP) FAP-LDP — spec fap-ldp v0.2 §6. Endpoint LDP/JSON-LD servi par ORCE

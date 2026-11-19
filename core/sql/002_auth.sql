@@ -1,4 +1,4 @@
--- 002_auth.sql — auth.acl + auth.can() (spec fap§app v0.2 §7.2)
+-- 002_auth.sql — auth.acl + auth.can() (spec fap-ldp v0.2 §7.2)
 -- Correctif v0.2 : l'héritage (inherited) ne s'applique qu'aux conteneurs, c'est-à-dire aux
 -- resource_uri se terminant par '/' — sinon une ACL sur /tickets/37 s'appliquerait aussi à
 -- /tickets/370. starts_with évite les wildcards LIKE (%/_ dans les IRI).

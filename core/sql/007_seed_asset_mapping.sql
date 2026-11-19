@@ -9,6 +9,15 @@
 -- catalogue cœur (datasets.json) + UPDATE published=true ici.
 -- Hypothèse v1 : clé primaire nommée `id` (resource_iri_pattern '<id>').
 
+-- Grants gold (idempotent ; le schéma gold peut être créé après 001 — par ex. par le cœur)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'gold') THEN
+    GRANT USAGE ON SCHEMA gold TO app, reader, materializer;
+    GRANT SELECT ON ALL TABLES IN SCHEMA gold TO app, reader;
+  END IF;
+END $$;
+
 INSERT INTO dsp.asset_mapping (asset_uri, container_uri, table_schema, table_name, resource_iri_pattern, published)
 SELECT '/gold/' || t.table_name || '/', '/gold/' || t.table_name || '/',
        'gold', t.table_name, '/gold/' || t.table_name || '/<id>', false

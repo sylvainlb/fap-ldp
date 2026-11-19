@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-fap-ldp",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "FAP-LDP core (spec fap-ldp v0.2, E1+E2+E3) : nœud conteneur LDP (PEP) + nœud PDP dans ORCE",
   "license": "UNLICENSED",
   "node-red": {
