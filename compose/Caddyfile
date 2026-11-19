@@ -1,0 +1,28 @@
+# Caddyfile — frontal TLS (443). Local: DOMAIN=app.localhost ; prod: A record vers la VM.
+{
+  auto_https off
+}
+
+:80 {
+  redir https://{host}{uri} permanent
+}
+
+https://{$DOMAIN:localhost} {
+  # IdP (Keycloak) — /auth/*
+  handle /auth/* {
+    uri strip_prefix /auth
+    reverse_proxy keycloak:8080
+  }
+  # Data plane DSP du cœur FAP
+  handle /dsp/* {
+    reverse_proxy orce:1880
+  }
+  # Éditeur Node-RED (admin)
+  handle /editor* {
+    reverse_proxy orce:1880
+  }
+  # Front app (same-origin /app/) + endpoint LDP racine
+  handle {
+    reverse_proxy orce:1880
+  }
+}

@@ -33,7 +33,7 @@ module.exports = function (RED) {
         await createRls(table, spec, baseIri, model);
         await registerMapping(table, spec, baseIri, model);
       }
-      node.log('modèle appliqué: ' + Object.keys(model.tables || {}).join(', '));
+      node.log('fap-ldp: model applied: ' + Object.keys(model.tables || {}).join(', ')); // marqueur grepvé par compose/deploy.sh
     }
 
     // "bigint fk buildings(id)" → "bigint REFERENCES buildings(id)" ;

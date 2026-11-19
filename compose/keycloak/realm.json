@@ -1,0 +1,73 @@
+{
+  "realm": "fap",
+  "enabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "clients": [
+    {
+      "clientId": "fap-front",
+      "name": "Front Startin'blox (pré-enregistré statiquement — décision I, pas de dynamic registration)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["https://${DOMAIN}/app/*", "http://localhost:3000/*", "http://localhost:1880/red/*"],
+      "webOrigins": ["https://${DOMAIN}", "http://localhost:3000"],
+      "dpopBoundAccessTokens": true,
+      "protocolMappers": [
+        {
+          "name": "webid",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "webid",
+            "claim.name": "webid",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "role",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "role",
+            "claim.name": "role",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "org",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "config": {
+            "claim.name": "org",
+            "claim.value": "${FAP_ORG}",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@${DOMAIN}",
+      "firstName": "Alice",
+      "lastName": "Gestionnaire",
+      "attributes": {
+        "webid": ["https://${DOMAIN}/users/1"],
+        "role": ["gestionnaire"]
+      },
+      "credentials": [{ "type": "password", "value": "${ALICE_PASSWORD}", "temporary": false }]
+    }
+  ]
+}

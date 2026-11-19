@@ -58,6 +58,8 @@
   "x": 540,
   "y": 100,
   "wires": [],
-  "goldMaxRows": "1"
+  "goldMaxRows": "1",
+  "vcTrustAnchors": "[\"did:web:partner.example\"]",
+  "vcDidDocs": "{\"did:web:partner.example\": {\"@context\": [\"https://www.w3.org/ns/did/v1\"], \"id\": \"did:web:partner.example\", \"verificationMethod\": [{\"id\": \"did:web:partner.example#key-1\", \"type\": \"JsonWebKey2020\", \"controller\": \"did:web:partner.example\", \"publicKeyJwk\": {\"kty\": \"EC\", \"x\": \"zfIVvLZ0Ls98uQN80a_2BGH4YS17PjvAJSFSTxQk_5g\", \"y\": \"KiOB6Fsg9gB7-e9WT2W3p_kzwTgKjjpapTs7052lc1Q\", \"crv\": \"P-256\"}}]}}"
  }
 ]

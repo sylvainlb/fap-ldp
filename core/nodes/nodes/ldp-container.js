@@ -11,6 +11,7 @@ const jsonld = require('../lib/jsonld');
 const webacl = require('../lib/webacl');
 const mergePatch = require('../lib/mergepatch');
 const jsonPatch = require('../lib/jsonpatch');
+const vc = require('../lib/vc');
 
 module.exports = function (RED) {
   function LdpContainerNode(config) {
@@ -26,8 +27,11 @@ module.exports = function (RED) {
       : node.pool;
     node.pdp = RED.nodes.getNode(config.pdp);
     node.devTokens = safeJson(config.devTokens); // test/TCK uniquement : token → claims
-    node.idpUserinfoUrl = config.idpUserinfoUrl || '';
-    node.goldMaxRows = parseInt(config.goldMaxRows || '10000', 10); // décision G : garde volumétrie gold
+    // "false"/vide (IDP_EXTERNAL=false en compose) = pas d'IdP externe configuré
+    node.idpUserinfoUrl = (config.idpUserinfoUrl && config.idpUserinfoUrl !== 'false') ? config.idpUserinfoUrl : '';
+    node.vcTrustAnchors = safeJson(config.vcTrustAnchors || '[]');   // préfixes did:web de confiance (spec §7.6)
+    node.vcDidDocs = safeJson(config.vcDidDocs || '{}');             // override de test : did → document DID (clé publique JWK)
+    node.goldMaxRows = parseInt(config.goldMaxRows, 10) || 10000; // décision G : garde volumétrie gold
     node.mappings = null;      // cache dsp.asset_mapping
     node.mappingsAt = 0;
     node.columns = {};         // cache colonnes par schema.table
@@ -168,6 +172,13 @@ module.exports = function (RED) {
       const m = h.match(/^(?:Bearer|DPoP)\s+(.+)$/i);
       if (!m) return { token: null, claims: null };
       const token = m[1].trim();
+      // VC en JWT (spec §7.6) : vérifiée cryptographiquement si c'en est une, 401 si invalide
+      try {
+        const vcClaims = await vc.verifyVc(token, { trustAnchors: node.vcTrustAnchors, didDocOverrides: node.vcDidDocs });
+        if (vcClaims) return { token, claims: vcClaims };
+      } catch (e) {
+        return { token, claims: null, vcError: e.message };
+      }
       if (node.devTokens[token]) return { token, claims: node.devTokens[token] }; // test/TCK
       if (node.idpUserinfoUrl) {
         const r = await fetch(node.idpUserinfoUrl, { headers: { Authorization: 'Bearer ' + token } });
@@ -206,10 +217,10 @@ module.exports = function (RED) {
       if (parsed.kind === 'notfound') return sendError(res, 404, 'NotFound', req.path);
       if (!parsed.mapping) return sendError(res, 404, 'NotFound', req.path);
 
-      const { token, claims } = await claimsFromRequest(req);
+      const { token, claims, vcError } = await claimsFromRequest(req);
       if (!claims) {
         res.set('WWW-Authenticate', 'DPoP realm="fap-ldp", Bearer realm="fap-ldp"');
-        return sendError(res, 401, 'Unauthorized', 'authentication required');
+        return sendError(res, 401, 'Unauthorized', vcError || 'authentication required');
       }
 
       const m = parsed.mapping;

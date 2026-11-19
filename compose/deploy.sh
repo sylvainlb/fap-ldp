@@ -67,6 +67,31 @@ dc exec -T postgres psql -U postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname=
   || for f in "$INITDB"/*.sql; do dc exec -T postgres psql -U postgres -v ON_ERROR_STOP=1 -f "/docker-entrypoint-initdb.d/$(basename "$f")" >/dev/null; done
 log "rôles PG: $(dc exec -T postgres psql -U postgres -tAc "SELECT string_agg(rolname, ', ' ORDER BY rolname) FROM pg_roles WHERE rolname IN ('gate','app','reader','materializer','admin')")"
 
+# --- 2b. Realm Keycloak rendu (${DOMAIN}, ${FAP_ORG}) + flows.json assemblé -------
+FAP_ORG="${FAP_ORG:-fap-pod}"
+export FAP_ORG
+REALM_SRC="$HERE/keycloak/realm.json"
+REALM_OUT="${KEYCLOAK_REALM_FILE:-$DEPLOY_DIR/keycloak/realm.json}"
+if grep -qE '\$\{(DOMAIN|FAP_ORG)' "$REALM_SRC" || [ "$REALM_OUT" != "$REALM_SRC" ]; then
+  mkdir -p "$(dirname "$REALM_OUT")"
+  DOMAIN="$DOMAIN" FAP_ORG="$FAP_ORG" envsubst '${DOMAIN} ${FAP_ORG}' < "$REALM_SRC" > "$REALM_OUT"
+  export KEYCLOAK_REALM_FILE="$REALM_OUT"
+  log "realm Keycloak rendu: $REALM_OUT (DOMAIN=$DOMAIN, FAP_ORG=$FAP_ORG)"
+fi
+FLOWS_DIR="${FLOWS_DIR:-$DEPLOY_DIR/flows}"
+if [ ! -f "$FLOWS_DIR/flows.json" ]; then
+  mkdir -p "$FLOWS_DIR"
+  CORE_FLOWS="$CORE_DIR/deploy/orce/data/flows.json"
+  python3 - "$CORE_FLOWS" "$HERE/flows/fap-ldp.json" "$FLOWS_DIR/flows.json" <<'PYEOF'
+import json, sys
+core = json.load(open(sys.argv[1])) if sys.argv[1] != '-' and __import__('os').path.exists(sys.argv[1]) else []
+frag = json.load(open(sys.argv[2]))
+json.dump(core + frag, open(sys.argv[3], 'w'), indent=1, ensure_ascii=False)
+PYEOF
+  log "flows.json assemblé: $FLOWS_DIR/flows.json (cœur + fap-ldp)"
+fi
+export FLOWS_DIR
+
 # --- 3. ORCE : au boot le nœud fap-ldp applique DEPLOY_DIR/config/model.json ----
 mkdir -p "$DEPLOY_DIR/config"
 [ -f "$DEPLOY_DIR/config/model.json" ] || { log "pas de model.json dans $DEPLOY_DIR/config — copie de l'exemple supervision"; cp "$ROOT/examples/supervision/model.json" "$DEPLOY_DIR/config/model.json"; }

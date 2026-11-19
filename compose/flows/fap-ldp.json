@@ -1,0 +1,46 @@
+[
+  {
+    "id": "fapldp-tab",
+    "type": "tab",
+    "label": "FAP-LDP",
+    "disabled": false
+  },
+  {
+    "id": "fapldp-model",
+    "type": "fap-ldp-model",
+    "z": "fapldp-tab",
+    "name": "fap-ldp model (boot)",
+    "modelPath": "${FAP_LDP_CONFIG}",
+    "pgDsn": "${PG_ADMIN_DSN}",
+    "pgPoolMax": "2",
+    "x": 120, "y": 100, "wires": []
+  },
+  {
+    "id": "fapldp-pdp",
+    "type": "fap-ldp-pdp",
+    "z": "fapldp-tab",
+    "name": "fap-ldp PDP",
+    "baseIri": "${FAP_LDP_BASE_IRI}",
+    "podOrg": "${FAP_ORG}",
+    "cacheTtlMs": "3600000",
+    "pgDsn": "${PG_APP_DSN}",
+    "pgPoolMax": "5",
+    "x": 340, "y": 100, "wires": []
+  },
+  {
+    "id": "fapldp-container",
+    "type": "fap-ldp-container",
+    "z": "fapldp-tab",
+    "name": "fap-ldp conteneur LDP (PEP)",
+    "baseIri": "${FAP_LDP_BASE_IRI}",
+    "podOrg": "${FAP_ORG}",
+    "catalogPath": "/dsp/catalogue",
+    "pdp": "fapldp-pdp",
+    "idpUserinfoUrl": "${IDP_USERINFO_URL}",
+    "vcTrustAnchors": "${FAP_LDP_VC_TRUST_ANCHORS}",
+    "goldMaxRows": "${FAP_LDP_GOLD_MAX_ROWS}",
+    "pgDsn": "${PG_APP_DSN}",
+    "pgPoolMax": "5",
+    "x": 600, "y": 100, "wires": []
+  }
+]

@@ -29,13 +29,18 @@ services:
       PG_GATE_DSN: "postgres://gate:${PG_GATE_PASSWORD}@postgres:5432/fap"
       PG_APP_DSN:  "postgres://app:${PG_APP_PASSWORD}@postgres:5432/fap"
       PG_READER_DSN: "postgres://reader:${PG_READER_PASSWORD}@postgres:5432/fap"
+      PG_ADMIN_DSN: "postgres://postgres:${PG_ADMIN_PASSWORD:-postgres}@postgres:5432/fap"
       # config du nœud fap-ldp lue au boot (modèle métier, extensions, base IRI)
       FAP_LDP_CONFIG: /config/model.json
       FAP_LDP_BASE_IRI: "https://${DOMAIN}/"
+      FAP_ORG: "${FAP_ORG:-fap-pod}"                  # claim org des membres internes (contrat-cadre)
       IDP_ISSUER_URL: "${IDP_EXTERNAL:-false}" # si IdP externe (étape 1)
+      IDP_USERINFO_URL: "${IDP_EXTERNAL:+${IDP_ISSUER_URL}/protocol/openid-connect/userinfo}"
+      FAP_LDP_VC_TRUST_ANCHORS: "${FAP_LDP_VC_TRUST_ANCHORS:-}"
+      FAP_LDP_GOLD_MAX_ROWS: "${FAP_LDP_GOLD_MAX_ROWS:-10000}"
     volumes:
       - orce-data:/data                              # flows + palette (node-red-contrib-fap-ldp installé au boot)
-      - ./flows:/data/flows:ro                       # flows cœur FAP + flows LDP
+      - ${FLOWS_DIR:-./flows}:/data/flows:ro         # flows.json assemblé par deploy.sh (cœur + fap-ldp.json)
       - ${DEPLOY_DIR:-./deploy}/config:/config:ro    # model.json, sources.yml, fap-ldp-values.yml
     depends_on:
       postgres: { condition: service_healthy }
@@ -50,7 +55,7 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
     volumes:
-      - ./keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+      - ${KEYCLOAK_REALM_FILE:-./keycloak/realm.json}:/opt/keycloak/data/import/realm.json:ro
     command: start --import-realm
     # exposé uniquement en interne (caddy fait le TLS) ; healthcheck interne
     healthcheck:

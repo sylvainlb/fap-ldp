@@ -40,10 +40,14 @@ CA-L7 (conteneur non publié → 403 externe) · CA-L11 (`permissions` inline) �
 · CA-L13 (`/users/<pk>` déréférençable) · garde volumétrie gold §6.7 (403 `GoldContainerTooLarge`) ·
 ressources gold en LDP.
 
-Dernier run : **32 PASS, 0 FAIL** (2026-11-19, postgres:16-alpine + fap-light-orce, Node-RED 4.0.9), couvrant CA-L1..L7, L10 (Merge Patch + JSON Patch), L11 (`permissions` inline), L12 (slash final), L13 (webid déréférençable) et la garde volumétrie gold §6.7.
+Dernier run : **e2e 39 PASS / 0 FAIL** + **ldp-tests subset 8 PASS / 0 FAIL** (2026-11-19, postgres:16-alpine + fap-light-orce, Node-RED 4.0.9).
+Couvert : CA-L1..L7, L9 (révocation mesurée ~25 ms < 1 s), L10 (Merge Patch + JSON Patch RFC 6902),
+L11 (`permissions` inline), L12 (slash final), L13 (webid déréférençable), CA-L8 (sous-ensemble
+ldp-tests W3C, `ldp-w3c-subset.sh`), vérification crypto VC (ES256, did:web, trust anchors —
+VC valide 200, signature altérée 401, émetteur non confiance 401), garde volumétrie gold §6.7.
+Latence mesurée : ~10 ms par lecture LDP app.* (ENF §10 < 200 ms).
 
 ## À venir
 
-- Suite W3C ldp-tests (CA-L8, sous-ensemble listé) — harness à brancher ici.
-- CA-L9 (révocation < 1 s via purge cache `pg_notify('fap_revoked')`).
-- Latence < 200 ms (ENF §10, à mesurer ici).
+- Suite W3C ldp-tests complète (au-delà du sous-ensemble §6.6) en CI.
+- Tests de charge (ENF §10, plusieurs clients concurrents).

@@ -4,11 +4,15 @@
 const { Pool } = require('pg');
 
 function createPool(config) {
+  // DSN prioritaire (compose fournit PG_*_DSN) : postgres://user:pass@host:port/db
+  if (config.pgDsn) {
+    return new Pool({ connectionString: config.pgDsn, max: parseInt(config.pgPoolMax || '5', 10) });
+  }
   return new Pool({
     host: config.pgHost || '127.0.0.1',
     port: parseInt(config.pgPort || '5432', 10),
     database: config.pgDatabase || 'postgres',
-    user: config.pgUser || 'ldp',
+    user: config.pgUser || 'app',
     password: config.pgPassword || '',
     max: parseInt(config.pgPoolMax || '5', 10)
   });

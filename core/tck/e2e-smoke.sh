@@ -72,6 +72,33 @@ ck "PATCH json-patch (RFC 6902) → 200" 200 "$(code -X PATCH -H "$A" -H 'Conten
 curl -s -H "$A" $B/tickets/370 | grep -q RESOLVED && ck "status=RESOLVED après json-patch" ok ok || ck "status RESOLVED" ok "manquant"
 # 16. CA-L13 (décision H) : webid déréférençable → /users/1
 ck "GET /users/1 (profil webid) → 200" 200 "$(code -H "$A" $B/users/1)"
+
+
+# 18. VC vérifiée cryptographiquement (spec §7.6) : did:web:partner.example, ES256
+GENVC="docker exec orce node /tmp/gen-vc.js /tmp/vc-issuer-key.json"
+docker cp core/tck/fixtures/gen-vc.js orce:/tmp/gen-vc.js 2>/dev/null || docker cp "$(dirname "$0")/fixtures/gen-vc.js" orce:/tmp/gen-vc.js
+docker cp "$(dirname "$0")/fixtures/vc-issuer-key.json" orce:/tmp/vc-issuer-key.json
+VC=$($GENVC)
+ck "VC valide GET /buildings/1 → 200" 200 "$(code -H "Authorization: Bearer $VC" $B/buildings/1)"
+ck "VC valide GET /buildings/2 → 403 (ODRL isAnyOf)" 403 "$(code -H "Authorization: Bearer $VC" $B/buildings/2)"
+VC_BAD=$(python3 -c "
+import sys
+t='$VC'.split('.')
+sig=t[2]
+t[2]=('A' if sig[0]!='A' else 'B')+sig[1:]   # 1er caractère de la signature altéré
+print('.'.join(t))")
+ck "VC signature invalide → 401" 401 "$(code -H "Authorization: Bearer $VC_BAD" $B/buildings/1)"
+VC_EVIL=$($GENVC '{"iss":"did:web:evil.example","sub":"did:web:evil.example"}')
+ck "VC émetteur hors trust anchors → 401" 401 "$(code -H "Authorization: Bearer $VC_EVIL" $B/buildings/1)"
+# 17. CA-L9 : révocation ACL → 403 en < 1 s (purge cache via pg_notify fap_revoked)
+ck "bob GET /buildings/2 avant révocation → 200" 200 "$(code -H "$Bo" $B/buildings/2)"
+$PGC -c "DELETE FROM auth.acl WHERE resource_uri='$B/buildings/2' AND subject='role:technicien'" >/dev/null
+t0=$(date +%s%N)
+c=$(code -H "$Bo" $B/buildings/2)
+t1=$(date +%s%N)
+ms=$(( (t1 - t0) / 1000000 ))
+ck "bob GET /buildings/2 après révocation → 403 (CA-L9)" 403 "$c"
+[ "$ms" -lt 1000 ] && ck "révocation effective en ${ms} ms < 1 s (CA-L9)" ok ok || ck "révocation < 1 s" ok "${ms} ms"
 # audit
 n=$($PGC -t -c "SELECT count(*) FROM dsp.audit WHERE decision='allow' AND agreement_id='agr-1'")
 [ "$n" -ge 1 ] && ck "audit agr-1 présent (CA-L4)" ok ok || ck "audit agr-1" ok "$n"
