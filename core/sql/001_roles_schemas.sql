@@ -25,9 +25,9 @@ REVOKE ALL ON SCHEMA app, auth, dsp FROM PUBLIC;
 -- Schémas du cœur : idem si présents (le cœur applique déjà la même règle, garde-fou ici).
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname IN ('bronze','silver','gold')) THEN
-    REVOKE ALL ON SCHEMA bronze, silver, gold FROM PUBLIC;
-  END IF;
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'bronze') THEN REVOKE ALL ON SCHEMA bronze FROM PUBLIC; END IF;
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'silver') THEN REVOKE ALL ON SCHEMA silver FROM PUBLIC; END IF;
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'gold')   THEN REVOKE ALL ON SCHEMA gold   FROM PUBLIC; END IF;
 END $$;
 
 -- Droits par rôle sur les schémas de l'extension.

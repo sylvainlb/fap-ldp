@@ -32,6 +32,7 @@
     },
     "comments": {
       "pk": "id", "owner": "author", "published": false,
+      "parent": "tickets", "parent_fk": "ticket_id",
       "fields": {
         "id": "bigserial", "ticket_id": "bigint fk tickets(id)", "author": "bigint fk users(id)",
         "text": "text not null", "ts": "timestamptz"

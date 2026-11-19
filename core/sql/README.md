@@ -15,6 +15,7 @@ for f in core/sql/00*.sql; do psql -v ON_ERROR_STOP=1 -f "$f"; done
 | `004_app_socle.sql` | Socle générique : `app.versions`, `app.tombstones`, `app.outbox` + triggers génériques. **Aucun modèle métier** — les tables `app.<table>` sont créées au boot par le nœud depuis `config/model.json` du déploiement (exemples : `examples/`) |
 | `005_rls.sql` | Conventions RLS génériques (le PEP pose `app.base_iri`/`app.webid`/`app.role`) ; les policies par table sont créées au boot par le nœud (exemple : `examples/supervision/005_rls.sql`) |
 | `006_maintenance.sql` | Purge RGPD (rétention 30 j, pg_cron hebdo) — `SECURITY DEFINER` |
+| `007_seed_asset_mapping.sql` | Mapping conteneurs `/gold/<table>/` du cœur (publié=false par défaut ; publication déclarée côté catalogue cœur) |
 
 Les modèles métier (tables `app.<table>`, triggers, policies RLS) ne sont PAS dans `core/` :
 voir `examples/` (ex. `examples/supervision/` : `model.json` + SQL équivalents).
