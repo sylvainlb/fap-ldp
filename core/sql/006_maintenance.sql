@@ -1,4 +1,4 @@
--- 006_maintenance.sql — purge physique RGPD (spec fap-ldp v0.2 §5.2, §8)
+-- 006_maintenance.sql — purge physique RGPD (spec fap§app v0.2 §5.2, §8)
 -- Tombstones + versions conservés 30 jours, purge hebdomadaire par pg_cron.
 -- Si pg_cron n'est pas installé, exécuter manuellement (cron système) :
 --   psql -c "SELECT app.purge_old_tombstones()"
@@ -30,9 +30,9 @@ END $$ LANGUAGE plpgsql SECURITY DEFINER;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-    IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'fap-ldp-purge-tombstones') THEN
+    IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'fap§app-purge-tombstones') THEN
       PERFORM cron.schedule(
-        'fap-ldp-purge-tombstones',
+        'fap§app-purge-tombstones',
         '0 3 * * 0',                               -- dimanche 03:00
         'SELECT app.purge_old_tombstones()');
     END IF;

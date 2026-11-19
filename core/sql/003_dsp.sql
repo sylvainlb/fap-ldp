@@ -1,5 +1,5 @@
 -- 003_dsp.sql — schémas dsp.* : contrats, capacités, audit, mapping asset ↔ conteneur
--- (spec fap-ldp v0.2 §7.2, §6). La négociation DSP elle-même reste dans le cœur FAP
+-- (spec fap§app v0.2 §7.2, §6). La négociation DSP elle-même reste dans le cœur FAP
 -- (dsp-control-plane-api v1) ; FAP-LDP consulte/écrit cet état.
 
 CREATE TABLE IF NOT EXISTS dsp.contracts (
@@ -54,11 +54,11 @@ DROP TRIGGER IF EXISTS contracts_revoked ON dsp.contracts;
 CREATE TRIGGER contracts_revoked AFTER UPDATE OF state OR DELETE ON dsp.contracts
   FOR EACH ROW EXECUTE FUNCTION dsp.notify_contract_revoked();
 
--- Droits : le PDP (rôle ldp) consulte et met à jour contrats/capacités, écrit l'audit.
-GRANT SELECT, INSERT, UPDATE, DELETE ON dsp.contracts TO ldp;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dsp.capacities TO ldp;
-GRANT SELECT, INSERT ON dsp.audit TO ldp;
-GRANT SELECT, INSERT, UPDATE ON dsp.asset_mapping TO ldp;
+-- Droits : le PDP (rôle app) consulte et met à jour contrats/capacités, écrit l'audit.
+GRANT SELECT, INSERT, UPDATE, DELETE ON dsp.contracts TO app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dsp.capacities TO app;
+GRANT SELECT, INSERT ON dsp.audit TO app;
+GRANT SELECT, INSERT, UPDATE ON dsp.asset_mapping TO app;
 GRANT SELECT ON dsp.contracts, dsp.capacities, dsp.asset_mapping TO reader;
-GRANT USAGE ON SCHEMA dsp TO ldp, reader;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA dsp TO ldp;
+GRANT USAGE ON SCHEMA dsp TO app, reader;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA dsp TO app;

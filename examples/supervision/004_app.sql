@@ -1,4 +1,4 @@
--- 004_app.sql — DDL du domaine app.* (spec fap-ldp v0.2 §5.1) + versioning, tombstones, outbox (§5.2/§5.3)
+-- 004_app.sql — DDL du domaine app.* (spec fap§app v0.2 §5.1) + versioning, tombstones, outbox (§5.2/§5.3)
 -- Modèle issu de la spec supervision §4.1 (User, Building, Ticket, Comment).
 
 CREATE TABLE IF NOT EXISTS app.users (
@@ -140,8 +140,8 @@ BEGIN
            FOR EACH ROW EXECUTE FUNCTION app.outbox_trigger()';
 END $$;
 
--- Droits rôle ldp (le PEP écrit app.* avec ce rôle)
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO ldp;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA app TO ldp;
-GRANT EXECUTE ON FUNCTION app.set_updated_at(), app.version_trigger(), app.tombstone_trigger(), app.outbox_trigger() TO ldp;
-GRANT USAGE ON SCHEMA app TO ldp;
+-- Droits rôle app (le PEP écrit app.* avec ce rôle)
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA app TO app;
+GRANT EXECUTE ON FUNCTION app.set_updated_at(), app.version_trigger(), app.tombstone_trigger(), app.outbox_trigger() TO app;
+GRANT USAGE ON SCHEMA app TO app;
