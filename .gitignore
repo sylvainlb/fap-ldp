@@ -1,0 +1,17 @@
+# Evidence TCK (logs, rapports JUnit) — générés à l'exécution
+tck/evidence/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Secrets et config locales
+*.local.properties
+*.local
+.env
+*.pem
+*.key
+compose/.env*
+charts/fap-ldp/values.local.yaml
