@@ -67,9 +67,13 @@ ck "alice GET /gold/city_dashboard_summary/1 → 200" 200 "$(code -H "$A" $B/gol
 ck "GET /tickets/370/ (slash final) ≡ /tickets/370 → 200" 200 "$(code -H "$A" $B/tickets/370/)"
 # 14. CA-L11 : clé inline permissions
 ck "GET /tickets/370 contient permissions.view=true" ok "$(curl -s -H "$A" $B/tickets/370 | grep -q '"permissions"' && grep -q '"view":true' /tmp/body 2>/dev/null; curl -s -H "$A" $B/tickets/370 | python3 -c 'import json,sys; d=json.load(sys.stdin); print("ok" if d["permissions"]["view"] and d["permissions"]["change"] else "ko")')"
-# 15. CA-L10 (décision F) : PATCH JSON Patch RFC 6902
-ck "PATCH json-patch (RFC 6902) → 200" 200 "$(code -X PATCH -H "$A" -H 'Content-Type: application/json-patch+json' -d '[{"op":"replace","path":"/app_tickets:status","value":"RESOLVED"}]' $B/tickets/370)"
-curl -s -H "$A" $B/tickets/370 | grep -q RESOLVED && ck "status=RESOLVED après json-patch" ok ok || ck "status RESOLVED" ok "manquant"
+# 15. CA-L10 (décision F) : PATCH JSON Patch RFC 6902 (OPEN→IN_PROGRESS, transition valide — décision K)
+ck "PATCH json-patch (RFC 6902) → 200" 200 "$(code -X PATCH -H "$A" -H 'Content-Type: application/json-patch+json' -d '[{"op":"replace","path":"/app_tickets:status","value":"IN_PROGRESS"}]' $B/tickets/370)"
+curl -s -H "$A" $B/tickets/370 | grep -q IN_PROGRESS && ck "status=IN_PROGRESS après json-patch" ok ok || ck "status IN_PROGRESS" ok "manquant"
+# 15b. CA-L15 (décision K) : matrice de transitions déclarée dans model.json (business_rules)
+ck "PATCH IN_PROGRESS→CLOSED (transition interdite) → 409 invalid_transition" 409 "$(code -X PATCH -H "$A" -H 'Content-Type: application/merge-patch+json' -d '{"app_tickets:status":"CLOSED"}' $B/tickets/370)"
+ck "PATCH IN_PROGRESS→RESOLVED (gestionnaire, autorisé) → 200" 200 "$(code -X PATCH -H "$A" -H 'Content-Type: application/merge-patch+json' -d '{"app_tickets:status":"RESOLVED"}' $B/tickets/370)"
+ck "POST statut CLOSED (on_create non autorisé) → 409 invalid_transition" 409 "$(code -H "$A" -H 'Content-Type: application/ld+json' -d '{"app_tickets:title":"X","app_tickets:building_id":1,"app_tickets:created_by":1,"app_tickets:status":"CLOSED"}' $B/tickets/)"
 # 16. CA-L13 (décision H) : webid déréférençable → /users/1
 ck "GET /users/1 (profil webid) → 200" 200 "$(code -H "$A" $B/users/1)"
 

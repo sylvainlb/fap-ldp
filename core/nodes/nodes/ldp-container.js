@@ -18,6 +18,11 @@ module.exports = function (RED) {
     RED.nodes.createNode(this, config);
     const node = this;
     node.baseIri = (config.baseIri || 'http://localhost:1880/').replace(/\/?$/, '/');
+    // décision K (v0.4, CA-L15) : règles métier (transitions) déclarées dans le model du déploiement
+    try {
+      const modelPath = config.modelPath || process.env.FAP_LDP_CONFIG || '/config/model.json';
+      node.businessRules = (JSON.parse(require('fs').readFileSync(modelPath, 'utf8')).business_rules) || [];
+    } catch (e) { node.businessRules = []; }
     node.podOrg = config.podOrg || '';
     node.catalogPath = config.catalogPath || '/dsp/catalogue';
     node.pool = createPool(config);
@@ -41,7 +46,12 @@ module.exports = function (RED) {
     RED.httpNode.disable('etag'); // nos ETag LDP (W/"...") sont posés explicitement, pas le hash express
 
     RED.httpNode.use((req, res, next) => {
-      if (req.path.startsWith('/dsp/') || req.path.startsWith('/red') || req.path.startsWith('/editor')) return next();
+      if (req.path.startsWith('/dsp/') || req.path.startsWith('/app/') || req.path.startsWith('/red') || req.path.startsWith('/editor')) return next(); // /app/ = proxy signé POST /app/query (C1.9/D-8) + front statique servi par caddy
+      // Réservé à ext/model-injection (E11) : endpoints admin + listing/méta des packages.
+      // Les conteneurs LDP /apps/<slug>/<table>/ restent servis ici via dsp.asset_mapping.
+      if (req.path.startsWith('/admin/')
+          || /^\/apps\/?$/.test(req.path)
+          || /^\/apps\/[^/]+\/meta$/.test(req.path)) return next();
       handle(req, res).catch(e => {
         node.error(e.stack || e.message);
         if (!res.headersSent) sendError(res, 500, 'InternalError', e.message);
@@ -288,10 +298,10 @@ module.exports = function (RED) {
             return (await client.query(q, [Object.values(parsed.params)[0]])).rows;
           }
           if (cond.length) q += ' WHERE ' + cond.join(' AND ');
-          q += ' ORDER BY t.id LIMIT 5000';
+          const pk = pkColumn(m);   // dernier placeholder du resource_iri_pattern (matviews gold sans colonne id)
+          q += ` ORDER BY t.${pk} LIMIT 5000`;
           return (await client.query(q)).rows;
         });
-        const pk = pkColumn(m);
         const members = rows.map(r => node.baseIri + (m.resource_iri_pattern || m.container_uri + '<id>')
           .replace(/^\//, '')
           .replace(/<[^>]+>/g, (ph) => {
@@ -310,6 +320,9 @@ module.exports = function (RED) {
         const cols = await tableColumns(m.table_schema, m.table_name);
         const names = Object.keys(row).filter(k => cols.some(c => c.column_name === k));
         if (names.length === 0) return sendError(res, 400, 'BadRequest', 'no known column');
+        // décision K (CA-L15) : règle on_create (ex. statut OPEN réservé au rôle gestionnaire)
+        const brErr = validateTransition(node.businessRules, m.table_name, {}, row, claims);
+        if (brErr) return sendError(res, 409, 'invalid_transition', brErr);
         const pk = pkColumn(m);
         const result = await withSession(poolFor(m), claims, node.baseIri, async client => {
           const q = `INSERT INTO ${m.table_schema}.${m.table_name} (${names.join(',')})
@@ -399,6 +412,9 @@ module.exports = function (RED) {
           nextDoc = { ...current.doc, ...row };
         }
         delete nextDoc.deleted_at;
+        // décision K (CA-L15) : transition de statut invalide → 409 invalid_transition
+        const brErr = validateTransition(node.businessRules, m.table_name, current.doc, nextDoc, claims);
+        if (brErr) return sendError(res, 409, 'invalid_transition', brErr);
         const cols = await tableColumns(m.table_schema, m.table_name);
         const names = Object.keys(nextDoc).filter(k => k !== pk && cols.some(c => c.column_name === k));
         // placeholders du WHERE décalés après ceux du SET
@@ -464,6 +480,27 @@ module.exports = function (RED) {
       for (const [k, v] of Object.entries(doc)) if (!k.startsWith('@')) out[k] = v;
       return out;
     }
+  }
+
+  // décision K : matrice des transitions déclarée dans config/model.json (business_rules)
+  function validateTransition(rules, table, oldDoc, newDoc, claims) {
+    for (const r of (rules || [])) {
+      if (r.table !== table || !r.field) continue;
+      const f = r.field, oldV = oldDoc[f], newV = newDoc[f];
+      if (newV === undefined || newV === oldV) continue;
+      const role = claims.role || '';
+      const userPk = parseInt(String(claims.webid || '').split('/').filter(Boolean).pop(), 10);
+      const isAssigned = oldDoc.assigned_to === userPk || newDoc.assigned_to === userPk;
+      const okRole = (arr) => Array.isArray(arr) && arr.some(x => x === role || (x === 'assigned_to' && isAssigned));
+      if (oldV === undefined || oldV === null) {
+        const oc = r.on_create && r.on_create[newV];
+        if (!oc || !okRole(oc)) return 'création: statut ' + newV + ' non autorisé pour le rôle ' + (role || '?');
+      } else {
+        const t = r.transitions && r.transitions[oldV] && r.transitions[oldV][newV];
+        if (!t || !okRole(t)) return 'transition interdite: ' + oldV + ' → ' + newV;
+      }
+    }
+    return null;
   }
 
   RED.nodes.registerType('fap-ldp-container', LdpContainerNode);

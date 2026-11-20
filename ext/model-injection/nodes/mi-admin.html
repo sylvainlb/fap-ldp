@@ -1,0 +1,51 @@
+<script type="text/javascript">
+RED.nodes.registerType('fap-ldp-mi-admin', {
+  category: 'FAP-LDP',
+  color: '#D8BFD8',
+  defaults: {
+    name: { value: 'model-injection admin' },
+    baseIri: { value: 'http://localhost:1880/' },
+    maxPackages: { value: '50' },
+    pgHost: { value: '127.0.0.1' },
+    pgPort: { value: '5432' },
+    pgDatabase: { value: 'fap' },
+    pgUser: { value: 'admin' },
+    pgPassword: { value: '' },
+    pgPoolMax: { value: '2' },
+    idpUserinfoUrl: { value: '' },
+    devTokens: { value: '' }
+  },
+  label: function () { return this.name || 'mi-admin'; },
+  inputs: 0,
+  outputs: 0
+});
+</script>
+<script type="text/html" data-template-name="fap-ldp-mi-admin">
+  <div class="form-row"><label>Nom</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label>Base IRI</label><input type="text" id="node-input-baseIri"></div>
+  <div class="form-row"><label>Quota pod (max packages)</label><input type="text" id="node-input-maxPackages"></div>
+  <hr>
+  <div class="form-row"><label>PG DSN (rôle admin)</label><input type="text" id="node-input-pgDsn" placeholder="postgres://admin:***@pg:5432/fap"></div>
+  <div class="form-row"><label>PG host</label><input type="text" id="node-input-pgHost"></div>
+  <div class="form-row"><label>PG port</label><input type="text" id="node-input-pgPort"></div>
+  <div class="form-row"><label>PG base</label><input type="text" id="node-input-pgDatabase"></div>
+  <div class="form-row"><label>PG user (admin)</label><input type="text" id="node-input-pgUser"></div>
+  <div class="form-row"><label>PG password</label><input type="password" id="node-input-pgPassword"></div>
+  <hr>
+  <div class="form-row"><label>IdP userinfo URL</label><input type="text" id="node-input-idpUserinfoUrl" placeholder="ou 'false'"></div>
+  <div class="form-row"><label>devTokens (TCK)</label><input type="text" id="node-input-devTokens" placeholder='{"tok-admin":{"webid":"…","role":"admin"}}'></div>
+</script>
+<script type="text/html" data-help-name="fap-ldp-mi-admin">
+  <p>Extension <b>model-injection (E11)</b> — endpoints admin du contrat d'injection
+  (spec <code>model-injection-spec.md</code> v0.3 §3) :</p>
+  <ul>
+    <li><code>POST /admin/apps</code> → install gouverné d'un package (une transaction : validation annexe A,
+      quotas, accord de contribution <code>dsp.contracts</code>, DDL <code>app.store_&lt;slug&gt;_*</code>,
+      <code>dsp.asset_mapping</code>, ACL initiales, audit) → <code>201</code> + <code>Location: /apps/&lt;slug&gt;/meta</code></li>
+    <li><code>DELETE /admin/apps/&lt;slug&gt;</code> → révocation (contrat révoqué, asset dépublié, purge cache PDP)</li>
+    <li><code>GET /apps/</code> et <code>GET /apps/&lt;slug&gt;/meta</code> → lecture, tout utilisateur authentifié</li>
+  </ul>
+  <p>v1 : écriture = rôle <b>admin</b> seul. Erreurs JSON-LD <code>dspace:Error</code>
+  (<code>schema_violation</code>, <code>invalid_identifier</code>, <code>blacklisted_effect</code>,
+  <code>quota_exceeded</code>, <code>prefix_collision</code>). Connexion PG en rôle <b>admin</b> (DDL = migration).</p>
+</script>

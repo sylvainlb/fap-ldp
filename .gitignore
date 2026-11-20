@@ -16,3 +16,6 @@ __pycache__/
 compose/.env*
 compose/deploy/          # dossier de déploiement local (config/model.json, sql/ custom) — jamais commité
 charts/fap-ldp/values.local.yaml
+
+# Dépendances npm des packages de nœuds
+node_modules/

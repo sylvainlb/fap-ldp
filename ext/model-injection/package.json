@@ -1,0 +1,16 @@
+{
+  "name": "node-red-contrib-fap-ldp-model-injection",
+  "version": "0.1.0",
+  "description": "FAP-LDP ext E11 model-injection (spec model-injection-spec.md v0.3) : injection gouvernée de modèles par package (POST /admin/apps, tables app.store_<slug>_*, contrat DSP, boot idempotent + drift)",
+  "license": "UNLICENSED",
+  "node-red": {
+    "version": ">=3.0",
+    "nodes": {
+      "fap-ldp-mi-boot": "nodes/mi-boot.js",
+      "fap-ldp-mi-admin": "nodes/mi-admin.js"
+    }
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
+}

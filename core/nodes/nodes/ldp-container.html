@@ -7,6 +7,7 @@ RED.nodes.registerType('fap-ldp-container', {
     baseIri: { value: 'http://localhost:1880/' },
     podOrg: { value: '' },
     catalogPath: { value: '/dsp/catalogue' },
+    modelPath: { value: '' },
     pdp: { value: '', type: 'fap-ldp-pdp', required: true },
     idpUserinfoUrl: { value: '' },
     devTokens: { value: '' },
@@ -32,6 +33,7 @@ RED.nodes.registerType('fap-ldp-container', {
   <div class="form-row"><label>Base IRI</label><input type="text" id="node-input-baseIri"></div>
   <div class="form-row"><label>Org interne (claim org)</label><input type="text" id="node-input-podOrg"></div>
   <div class="form-row"><label>Catalogue DSP (Link rel="catalog")</label><input type="text" id="node-input-catalogPath"></div>
+  <div class="form-row"><label>model.json (règles métier K, vide = ${FAP_LDP_CONFIG})</label><input type="text" id="node-input-modelPath"></div>
   <div class="form-row"><label>Nœud PDP</label><input type="text" id="node-input-pdp"></div>
   <div class="form-row"><label>IdP userinfo URL (OIDC)</label><input type="text" id="node-input-idpUserinfoUrl"></div>
   <div class="form-row"><label>devTokens (JSON, test/TCK)</label><input type="text" id="node-input-devTokens"></div>

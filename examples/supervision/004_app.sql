@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS app.buildings (
   name text NOT NULL,
   address text,
   meter_id text,
-  facis_asset text,                              -- IRI de l'asset catalogue DSP
+  facis_asset text,
+  lat double precision,                          -- WGS84 (change request front §13.4)
+  lon double precision,                              -- IRI de l'asset catalogue DSP
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );

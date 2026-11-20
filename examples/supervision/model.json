@@ -1,42 +1,108 @@
 {
-  "$comment": "Exemple de modèle métier pour le déploiement 'supervision énergétique' (spec supervision-energetique-spec-fonctionnelle.md §4.1). Appliqué au boot par le nœud fap-ldp : crée les tables app.*, les triggers, les policies RLS, enregistre dsp.asset_mapping et crée les ACL initiales. Le SQL correspondant (validé sur Postgres 16) est dans 004_app.sql / 005_rls.sql de ce dossier.",
-  "base_iri": "https://<pod>/",
-  "tables": {
-    "users": {
-      "pk": "id", "owner": null, "published": false,
-      "fields": {
-        "id": "bigserial", "webid": "text unique not null", "name": "text not null",
-        "email": "text unique", "role": "text check in ('gestionnaire','technicien','admin')",
-        "created_at": "timestamptz default now()", "updated_at": "timestamptz default now()"
-      }
-    },
-    "buildings": {
-      "pk": "id", "owner": null, "published": true,
-      "fields": {
-        "id": "bigserial", "name": "text not null", "address": "text",
-        "meter_id": "text", "facis_asset": "text (IRI asset catalogue DSP)",
-        "created_at": "timestamptz default now()", "updated_at": "timestamptz default now()"
-      }
-    },
-    "tickets": {
-      "pk": "id", "owner": "created_by", "published": false,
-      "tombstone": "deleted_at",
-      "fields": {
-        "id": "bigserial", "title": "text not null", "description": "text",
-        "status": "text default 'OPEN' check in ('OPEN','IN_PROGRESS','RESOLVED','CLOSED')",
-        "priority": "text", "building_id": "bigint fk buildings(id)",
-        "anomaly_ref": "text (IRI ligne gold)",
-        "created_by": "bigint fk users(id)", "assigned_to": "bigint fk users(id)",
-        "created_at": "timestamptz default now()", "updated_at": "timestamptz default now()", "deleted_at": "timestamptz"
-      }
-    },
-    "comments": {
-      "pk": "id", "owner": "author", "published": false,
-      "parent": "tickets", "parent_fk": "ticket_id",
-      "fields": {
-        "id": "bigserial", "ticket_id": "bigint fk tickets(id)", "author": "bigint fk users(id)",
-        "text": "text not null", "ts": "timestamptz default now()"
-      }
-    }
+ "$comment": "Exemple de modèle métier pour le déploiement 'supervision énergétique' (spec supervision-energetique-spec-fonctionnelle.md §4.1). Appliqué au boot par le nœud fap-ldp : crée les tables app.*, les triggers, les policies RLS, enregistre dsp.asset_mapping et crée les ACL initiales. Le SQL correspondant (validé sur Postgres 16) est dans 004_app.sql / 005_rls.sql de ce dossier.",
+ "base_iri": "https://<pod>/",
+ "tables": {
+  "users": {
+   "pk": "id",
+   "owner": null,
+   "published": false,
+   "fields": {
+    "id": "bigserial",
+    "webid": "text unique not null",
+    "name": "text not null",
+    "email": "text unique",
+    "role": "text check in ('gestionnaire','technicien','admin')",
+    "created_at": "timestamptz default now()",
+    "updated_at": "timestamptz default now()"
+   }
+  },
+  "buildings": {
+   "pk": "id",
+   "owner": null,
+   "published": true,
+   "fields": {
+    "id": "bigserial",
+    "name": "text not null",
+    "address": "text",
+    "meter_id": "text",
+    "facis_asset": "text (IRI asset catalogue DSP)",
+    "created_at": "timestamptz default now()",
+    "updated_at": "timestamptz default now()",
+    "lat": "double precision (WGS84, nullable)",
+    "lon": "double precision (WGS84, nullable)"
+   }
+  },
+  "tickets": {
+   "pk": "id",
+   "owner": "created_by",
+   "published": false,
+   "tombstone": "deleted_at",
+   "fields": {
+    "id": "bigserial",
+    "title": "text not null",
+    "description": "text",
+    "status": "text default 'OPEN' check in ('OPEN','IN_PROGRESS','RESOLVED','CLOSED')",
+    "priority": "text",
+    "building_id": "bigint fk buildings(id)",
+    "anomaly_ref": "text (IRI ligne gold)",
+    "created_by": "bigint fk users(id)",
+    "assigned_to": "bigint fk users(id)",
+    "created_at": "timestamptz default now()",
+    "updated_at": "timestamptz default now()",
+    "deleted_at": "timestamptz"
+   }
+  },
+  "comments": {
+   "pk": "id",
+   "owner": "author",
+   "published": false,
+   "parent": "tickets",
+   "parent_fk": "ticket_id",
+   "fields": {
+    "id": "bigserial",
+    "ticket_id": "bigint fk tickets(id)",
+    "author": "bigint fk users(id)",
+    "text": "text not null",
+    "ts": "timestamptz default now()"
+   }
   }
+ },
+ "business_rules": [
+  {
+   "table": "tickets",
+   "field": "status",
+   "on_create": {
+    "OPEN": [
+     "gestionnaire"
+    ]
+   },
+   "transitions": {
+    "OPEN": {
+     "IN_PROGRESS": [
+      "gestionnaire",
+      "assigned_to"
+     ]
+    },
+    "IN_PROGRESS": {
+     "RESOLVED": [
+      "gestionnaire",
+      "assigned_to"
+     ]
+    },
+    "RESOLVED": {
+     "CLOSED": [
+      "gestionnaire"
+     ],
+     "IN_PROGRESS": [
+      "gestionnaire"
+     ]
+    },
+    "CLOSED": {
+     "OPEN": [
+      "gestionnaire"
+     ]
+    }
+   }
+  }
+ ]
 }

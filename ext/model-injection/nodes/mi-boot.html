@@ -1,0 +1,38 @@
+<script type="text/javascript">
+RED.nodes.registerType('fap-ldp-mi-boot', {
+  category: 'FAP-LDP',
+  color: '#D8BFD8',
+  defaults: {
+    name: { value: 'model-injection boot' },
+    baseIri: { value: 'http://localhost:1880/' },
+    pgHost: { value: '127.0.0.1' },
+    pgPort: { value: '5432' },
+    pgDatabase: { value: 'fap' },
+    pgUser: { value: 'admin' },
+    pgPassword: { value: '' },
+    pgPoolMax: { value: '2' }
+  },
+  label: function () { return this.name || 'mi-boot'; },
+  inputs: 0,
+  outputs: 0
+});
+</script>
+<script type="text/html" data-template-name="fap-ldp-mi-boot">
+  <div class="form-row"><label>Nom</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label>Base IRI</label><input type="text" id="node-input-baseIri"></div>
+  <hr>
+  <div class="form-row"><label>PG DSN (rôle admin)</label><input type="text" id="node-input-pgDsn" placeholder="postgres://admin:***@pg:5432/fap"></div>
+  <div class="form-row"><label>PG host</label><input type="text" id="node-input-pgHost"></div>
+  <div class="form-row"><label>PG port</label><input type="text" id="node-input-pgPort"></div>
+  <div class="form-row"><label>PG base</label><input type="text" id="node-input-pgDatabase"></div>
+  <div class="form-row"><label>PG user (admin)</label><input type="text" id="node-input-pgUser"></div>
+  <div class="form-row"><label>PG password</label><input type="password" id="node-input-pgPassword"></div>
+</script>
+<script type="text/html" data-help-name="fap-ldp-mi-boot">
+  <p>Extension <b>model-injection (E11)</b> — nœud de boot : applique de façon idempotente les fragments
+  de <code>app.app_packages</code> (state <code>installed</code>) : tables <code>app.store_&lt;slug&gt;_*&gt;</code>,
+  triggers du socle, RLS, <code>dsp.asset_mapping</code>, ACL initiales. Détecte le drift
+  (schéma live ≠ <code>fragment_hash</code>) → état <code>drift</code> + alarme + audit (CA-B7).
+  Le nœud core <code>fap-ldp-model</code> applique <code>config/model.json</code> ; celui-ci les fragments injectés.
+  v2 : hot-reload à chaud via E12. Connexion PG rôle <b>admin</b>.</p>
+</script>

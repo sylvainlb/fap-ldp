@@ -26,13 +26,15 @@ fap-ldp/
 │   ├── sql/                   ← socle générique UNIQUEMENT : rôles, auth.acl/auth.can, dsp.*, app.versions/tombstones/outbox, maintenance (pas de modèle métier)
 │   └── tck/                   ← conformité W3C LDP (app-tests) + tests PDP/ACL
 ├── examples/                  ← modèles métier d'exemple (ex. supervision/ : model.json + SQL), appliqués au boot par le nœud
-├── ext/                       ← extensions optionnelles E4–E10, chacune = package installable seul
-│   ├── semantics/  (E4)       ←   chaque ext : propre package/nœuds, propre tck/, propre SPEC.md
+├── ext/                       ← extensions optionnelles, chacune = package installable seul
+│   ├── semantics/  (E4)       ←   chaque ext : propre package/nœuds, propre tck/, propre README
 │   ├── shacl/      (E5)       ←   branchée sur les hooks stables du core, activée par config
 │   ├── index/      (E6)
 │   ├── push/       (E7)
 │   ├── federation/ (E8)
-│   └── store-rdf/  (E10)
+│   ├── store-rdf/  (E10)
+│   ├── model-injection/ (E11) ←   injection gouvernée de modèles par package (backend app store), v0.1
+│   └── hot-reload/ (E12)      ←   application à chaud des modèles (v2 de E11)
 ├── contracts/                 ← dépendance versionnée : fap-core-contracts v1.0
 ├── compose/                   ← install FAP-light (1 VM) : ORCE + package fap-ldp + PG + caddy + Keycloak embarqué
 │                              │   → guide pas à pas (from scratch, local/prod) : compose/README.md
