@@ -120,15 +120,39 @@ async function installPackage(pool, opts) {
     // upsert app.features (catalogue app store) si le socle app store est installé (L3)
     const hasFeatures = await client.query("SELECT to_regclass('app.features') IS NOT NULL AS ok");
     if (hasFeatures.rows[0].ok) {
-      const hasMiCol = await client.query(
-        `SELECT 1 FROM information_schema.columns WHERE table_schema='app' AND table_name='features' AND column_name='model_injected'`);
-      const cols = ['slug', 'title_i18n', 'description_i18n', 'icon', 'menu_order', 'component', 'route', 'config_schema', 'default_enabled'];
-      const vals = [slug, meta.title_i18n || null, meta.description_i18n || null, meta.icon || null,
-        meta.menu_order ?? 0, meta.component || null, meta.route || null, meta.config_schema || null, meta.default_enabled ?? false];
-      if (hasMiCol.rows.length) { cols.push('model_injected'); vals.push(true); }
+      const colRows = await client.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_schema='app' AND table_name='features'`);
+      const featureCols = new Set(colRows.rows.map((r) => r.column_name));
+      // meta → colonne app.features, 1:1 sans transformation (spec §3.1). Fallback = défaut DDL
+      // quand la colonne existe mais est absente du meta (colonnes NOT NULL : title_i18n, icon…).
+      // Colonnes v2 (020_features_v2.sql) : présentes seulement si le socle v2 est appliqué.
+      const metaMap = [
+        ['title_i18n', meta.title_i18n ?? {}],
+        ['description_i18n', meta.description_i18n ?? {}],
+        ['icon', meta.icon ?? 'extension'],
+        ['menu_order', meta.menu_order ?? 0],
+        ['component', meta.component ?? null],
+        ['route', meta.route ?? null],
+        ['role_min', meta.role_min ?? 'all'],
+        ['config_schema', meta.config_schema ?? { fields: [] }],
+        ['default_enabled', meta.default_enabled ?? false],
+        ['in_menu', meta.in_menu ?? true],
+        // v2 — feature distante : binaire npm/CDN + SRI (version/sri du package par défaut)
+        ['npm_package', meta.npm_package ?? null],
+        ['version', meta.version ?? version],
+        ['cdn_url', meta.cdn_url ?? null],
+        ['sri', meta.sri ?? sri ?? null],
+        ['tag', meta.tag ?? null],
+      ];
+      const cols = ['slug'];
+      const vals = [slug];
+      for (const [col, val] of metaMap) {
+        if (featureCols.has(col)) { cols.push(col); vals.push(val); }
+      }
+      if (featureCols.has('model_injected')) { cols.push('model_injected'); vals.push(true); }
       await client.query(
         `INSERT INTO app.features (${cols.join(',')}) VALUES (${cols.map((_, i) => '$' + (i + 1)).join(',')})
-         ON CONFLICT (slug) DO UPDATE SET ${cols.slice(1).map(c => `${c} = EXCLUDED.${c}`).join(', ')}`, vals);
+         ON CONFLICT (slug) DO UPDATE SET ${cols.slice(1).map((c) => `${c} = EXCLUDED.${c}`).join(', ')}`, vals);
     }
 
     await audit(client, { agreementId, webid, resourceUri: containerRootIri, mode: 'control' });
@@ -163,6 +187,9 @@ async function revokePackage(pool, slug, webid) {
     // asset retiré du catalogue (published=false, ligne conservée pour l'audit, §6)
     await client.query("UPDATE dsp.asset_mapping SET published = false WHERE container_uri LIKE $1", [`/apps/${slug}/%`]);
     await client.query("UPDATE app.app_packages SET state = 'revoked', revoked_at = now() WHERE slug = $1", [slug]);
+    // entrée du catalogue app store retirée (tombstone → filtrée du conteneur /features/,
+    // le PEP ne liste que deleted_at IS NULL) — sinon la feature fantôme reste visible dans /store
+    await client.query("UPDATE app.features SET deleted_at = now() WHERE slug = $1 AND deleted_at IS NULL", [slug]);
     await audit(client, { agreementId: r.rows[0].contract_id, webid, resourceUri: `/apps/${slug}/`, mode: 'control' });
     await client.query('COMMIT');
     // les tables store_<slug>_* sont droppées après la purge 30 j par app.mi_drop_revoked_packages (001_mi_maintenance.sql)

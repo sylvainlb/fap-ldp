@@ -1,0 +1,30 @@
+[
+  {
+    "id": "mi-tab",
+    "type": "tab",
+    "label": "FAP-LDP model-injection (E11)",
+    "disabled": false
+  },
+  {
+    "id": "mi-boot",
+    "type": "fap-ldp-mi-boot",
+    "z": "mi-tab",
+    "name": "model-injection boot (fragments + drift)",
+    "baseIri": "${FAP_LDP_BASE_IRI}",
+    "pgDsn": "${PG_ADMIN_DSN}",
+    "pgPoolMax": "2",
+    "x": 140, "y": 100, "wires": []
+  },
+  {
+    "id": "mi-admin",
+    "type": "fap-ldp-mi-admin",
+    "z": "mi-tab",
+    "name": "model-injection admin (POST /admin/apps…)",
+    "baseIri": "${FAP_LDP_BASE_IRI}",
+    "maxPackages": "50",
+    "pgDsn": "${PG_ADMIN_DSN}",
+    "pgPoolMax": "2",
+    "idpUserinfoUrl": "${IDP_USERINFO_URL}",
+    "x": 140, "y": 170, "wires": []
+  }
+]
