@@ -1,15 +1,15 @@
--- 007_seed_asset_mapping.sql — mapping conteneurs LDP ↔ tables gold (spec fap-ldp v0.2 §6, §2.1)
--- Les conteneurs app.* (/users/, /tickets/, ...) sont enregistrés AU BOOT par le nœud
--- fap-ldp-model à partir de config/model.json du déploiement (avec leurs policies RLS).
--- Ici uniquement les tables gold du cœur.
+-- 007_seed_asset_mapping.sql — LDP container ↔ gold table mapping (spec fap-ldp v0.2 §6, §2.1)
+-- The app.* containers (/users/, /tickets/, ...) are registered AT BOOT by the
+-- fap-ldp-model node from the deployment's config/model.json (with their RLS policies).
+-- Here only the core's gold tables.
 --
--- container_uri / asset_uri sont stockés en CHEMIN relatif ('/gold/<table>/') ; le PEP préfixe
--- par la base IRI du pod (config baseIri). published=true = publiable dans le catalogue DSP
--- (sinon interne : ACL seule, 403 externe — CA-L7). La publication effective se déclare côté
--- catalogue cœur (datasets.json) + UPDATE published=true ici.
--- Hypothèse v1 : clé primaire nommée `id` (resource_iri_pattern '<id>').
+-- container_uri / asset_uri are stored as RELATIVE PATHS ('/gold/<table>/'); the PEP prefixes
+-- them with the pod base IRI (config baseIri). published=true = publishable in the DSP catalog
+-- (otherwise internal: ACL only, 403 external — AC-L7). Effective publication is declared on the
+-- core catalog side (datasets.json) + UPDATE published=true here.
+-- v1 assumption: primary key named `id` (resource_iri_pattern '<id>').
 
--- Grants gold (idempotent ; le schéma gold peut être créé après 001 — par ex. par le cœur)
+-- Gold grants (idempotent; the gold schema may be created after 001 — e.g. by the core)
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'gold') THEN

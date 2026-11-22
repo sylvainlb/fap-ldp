@@ -1,5 +1,5 @@
-// webacl.js — sérialisation WebACL/JSON-LD ⇄ lignes auth.acl (spec fap-ldp v0.2 §7.3)
-// Mapping : acl:accessTo → resource_uri · acl:default → inherited (conteneur, slash final)
+// webacl.js — WebACL/JSON-LD serialization ⇄ auth.acl rows (spec fap-ldp v0.2 §7.3)
+// Mapping: acl:accessTo → resource_uri · acl:default → inherited (container, trailing slash)
 //            acl:agent / acl:agentClass → subject (webid, did, 'role:xxx', 'foaf:Agent')
 //            acl:mode → modes[] (acl:Read/Write/Append/Control)
 
@@ -14,14 +14,14 @@ const CONTEXT = {
 function modeToWac(m) { return MODE_TO_WAC[m] || m; }
 function wacToMode(m) { return WAC_TO_MODE[m] || String(m).replace(/^.*#/, '').toLowerCase(); }
 
-// rows: [{resource_uri, subject, modes[], inherited}] → document WebACL JSON-LD
+// rows: [{resource_uri, subject, modes[], inherited}] → WebACL JSON-LD document
 function serialize(resourceUri, rows) {
   const graph = rows.map(r => {
     const authz = {
       '@type': 'acl:Authorization',
       'acl:accessTo': r.resource_uri
     };
-    if (r.resource_uri.endsWith('/')) authz['acl:default'] = true; // hérité sur le contenu
+    if (r.resource_uri.endsWith('/')) authz['acl:default'] = true; // inherited on the content
     if (r.subject === 'foaf:Agent' || r.subject.startsWith('role:')) {
       authz['acl:agentClass'] = r.subject === 'foaf:Agent' ? 'foaf:Agent' : r.subject;
     } else {
@@ -33,7 +33,7 @@ function serialize(resourceUri, rows) {
   return { '@context': CONTEXT, '@id': resourceUri + '.acl', '@graph': graph };
 }
 
-// document WebACL → rows à insérer dans auth.acl (resource_uri = ressource ciblée)
+// WebACL document → rows to insert into auth.acl (resource_uri = targeted resource)
 function parse(doc, resourceUri) {
   const graph = Array.isArray(doc['@graph']) ? doc['@graph'] : (doc['@type'] ? [doc] : []);
   const rows = [];

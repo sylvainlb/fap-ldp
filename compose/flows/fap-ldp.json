@@ -31,7 +31,7 @@
     "id": "fapldp-container",
     "type": "fap-ldp-container",
     "z": "fapldp-tab",
-    "name": "fap-ldp conteneur LDP (PEP)",
+    "name": "fap-ldp LDP container (PEP)",
     "baseIri": "${FAP_LDP_BASE_IRI}",
     "podOrg": "${FAP_ORG}",
     "catalogPath": "/dsp/catalogue",

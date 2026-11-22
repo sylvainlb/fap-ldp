@@ -1,7 +1,7 @@
-// auth.js — ext/model-injection : résolution des claims depuis la requête HTTP.
-// Même canal que le core (spec §7.6) : Bearer/DPoP → userinfo OIDC (idpUserinfoUrl),
-// ou devTokens (TCK/test uniquement, jamais en prod). Le chemin « contrat signé » avec
-// capacité dsp.capacities est reporté en v2 (spec §3.2) ; en v1 seul le rôle admin écrit.
+// auth.js — ext/model-injection: resolving claims from the HTTP request.
+// Same channel as the core (spec §7.6): Bearer/DPoP → OIDC userinfo (idpUserinfoUrl),
+// or devTokens (TCK/test only, never in prod). The "signed contract" path with a
+// dsp.capacities capacity is deferred to v2 (spec §3.2); in v1 only the admin role writes.
 async function claimsFromRequest(req, { devTokens = {}, idpUserinfoUrl = '' } = {}) {
   const h = req.headers['authorization'] || '';
   const m = h.match(/^(?:Bearer|DPoP)\s+(.+)$/i);

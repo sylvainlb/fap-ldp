@@ -1,20 +1,20 @@
--- 005_rls.sql — Conventions RLS génériques (spec fap-ldp v0.2 §7.2)
--- auth.can() est définie dans 002_auth.sql.
+-- 005_rls.sql — Generic RLS conventions (spec fap-ldp v0.2 §7.2)
+-- auth.can() is defined in 002_auth.sql.
 --
--- Les policies RLS par table app.<table> NE SONT PAS dans ce fichier : elles sont créées au boot
--- par le nœud fap-ldp pour chaque table déclarée dans config/model.json du déploiement
--- (FORCE ROW LEVEL SECURITY + policies read/write via auth.can, IRI depuis app.base_iri).
--- Exemple complet : examples/supervision/005_rls.sql.
+-- The per-table RLS policies on app.<table> are NOT in this file: they are created at boot
+-- by the fap-ldp node for each table declared in the deployment's config/model.json
+-- (FORCE ROW LEVEL SECURITY + read/write policies via auth.can, IRI from app.base_iri).
+-- Full example: examples/supervision/005_rls.sql.
 --
--- Conventions posées par le PEP (rôle app) dans chaque transaction, avant toute requête :
---   SET LOCAL app.base_iri = 'https://<pod>/';   -- slash final toléré (rtrim dans les policies)
---   SET LOCAL app.webid    = '<webid du token>';
---   SET LOCAL app.role     = '<role du token>';
--- Claim absent → current_setting(..., true) = NULL → auth.can = false → deny silencieux.
+-- Conventions set by the PEP (app role) in each transaction, before any query:
+--   SET LOCAL app.base_iri = 'https://<pod>/';   -- trailing slash tolerated (rtrim in the policies)
+--   SET LOCAL app.webid    = '<webid from the token>';
+--   SET LOCAL app.role     = '<role from the token>';
+-- Missing claim → current_setting(..., true) = NULL → auth.can = false → silent deny.
 --
--- Héritage ACL (002_auth.sql) : inherited ne s'applique qu'aux conteneurs (resource_uri se
--- terminant par '/'), via starts_with — une ACL sur /tickets/37 ne couvre PAS /tickets/370.
+-- ACL inheritance (002_auth.sql): inherited applies only to containers (resource_uri
+-- ending with '/'), via starts_with — an ACL on /tickets/37 does NOT cover /tickets/370.
 --
--- RLS = autorisation pure : le filtre deleted_at IS NULL n'est PAS dans les policies (sur UPDATE,
--- PostgreSQL exige que la nouvelle ligne satisfasse aussi le USING des policies SELECT, ce qui
--- bloquerait le soft delete). Le PEP filtre les tombstones dans ses requêtes (WHERE deleted_at IS NULL).
+-- RLS = pure authorization: the deleted_at IS NULL filter is NOT in the policies (on UPDATE,
+-- PostgreSQL requires the new row to also satisfy the USING of the SELECT policies, which
+-- would block soft delete). The PEP filters tombstones in its queries (WHERE deleted_at IS NULL).

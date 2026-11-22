@@ -1,34 +1,34 @@
 # core/nodes — package `node-red-contrib-fap-ldp`
 
-Nœuds ORCE du core FAP-LDP (spec `fap-ldp-spec.md` v0.2 §3/§6.1 : un seul runtime, pas de service séparé) :
+ORCE nodes of the FAP-LDP core (spec `fap-ldp-spec.md` v0.2 §3/§6.1: a single runtime, no separate service):
 
-| Nœud | Rôle | Fichier |
+| Node | Role | File |
 |---|---|---|
-| `fap-ldp-model` | Boot : applique `config/model.json` (tables `app.*`, triggers, RLS, `dsp.asset_mapping`). Connexion rôle **admin** (boot = migration) | `nodes/model.js` |
-| `fap-ldp-container` | **PEP** : endpoint LDP/JSON-LD (GET/POST/PUT/DELETE/PATCH, `*.acl`, ETag/304/412). Pool rôle **app** (écritures `app.*`), pool **reader** optionnel (lectures gold) | `nodes/ldp-container.js` |
-| `fap-ldp-pdp` | **PDP** : contrat DSP (étape 1, cache PT1H + purge sur `pg_notify('fap_revoked')`) → ACL `auth.can` (étape 2) → obligations ODRL + audit (étape 3) | `nodes/pdp.js` |
+| `fap-ldp-model` | Boot: applies `config/model.json` (tables `app.*`, triggers, RLS, `dsp.asset_mapping`). **admin** role connection (boot = migration) | `nodes/model.js` |
+| `fap-ldp-container` | **PEP**: LDP/JSON-LD endpoint (GET/POST/PUT/DELETE/PATCH, `*.acl`, ETag/304/412). **app** role pool (writes to `app.*`), optional **reader** pool (gold reads) | `nodes/ldp-container.js` |
+| `fap-ldp-pdp` | **PDP**: DSP contract (step 1, PT1H cache + purge on `pg_notify('fap_revoked')`) → ACL `auth.can` (step 2) → ODRL obligations + audit (step 3) | `nodes/pdp.js` |
 
-Libs internes (`lib/`) : `pgpool.js` (pool + `withSession` : `SET LOCAL app.webid/role/base_iri` dans la
-transaction → RLS), `jsonld.js` (sérialisation JSON-LD v1, erreurs `dspace:Error`), `webacl.js`
+Internal libs (`lib/`): `pgpool.js` (pool + `withSession`: `SET LOCAL app.webid/role/base_iri` inside the
+transaction → RLS), `jsonld.js` (JSON-LD v1 serialization, `dspace:Error` errors), `webacl.js`
 (WebACL ⇄ `auth.acl`), `mergepatch.js` (RFC 7386).
 
-## Installation dans ORCE
+## Installation in ORCE
 
-Monter le package dans `~/.node-red/nodes/` (ou `npm install` dans `/data`) : Node-RED le charge
-au démarrage (les dépendances `pg` sont résolubles depuis `/data/node_modules` de l'image ORCE).
+Mount the package in `~/.node-red/nodes/` (or `npm install` in `/data`): Node-RED loads it
+at startup (the `pg` dependencies are resolvable from the ORCE image's `/data/node_modules`).
 
-## Flow minimal
+## Minimal flow
 
 ```
-[fap-ldp-model]  [fap-ldp-pdp]  [fap-ldp-container (pdp → nœud PDP)]
+[fap-ldp-model]  [fap-ldp-pdp]  [fap-ldp-container (pdp → PDP node)]
 ```
 
-Le nœud conteneur enregistre un middleware sur `RED.httpNode` : les chemins `/dsp/*`, `/red*`,
-`/editor*` restent au cœur FAP ; tout le reste est traité en LDP.
+The container node registers a middleware on `RED.httpNode`: the paths `/dsp/*`, `/red*`,
+`/editor*` remain with the FAP core; everything else is handled as LDP.
 
-## Authentification v1
+## Auth v1
 
-`Authorization: Bearer|DPoP <token>` → claims via userinfo OIDC (`idpUserinfoUrl`) ou, pour le
-TCK/test, `devTokens` (JSON token → claims, à ne pas utiliser en production). 401 +
-`WWW-Authenticate` si absent. La vérification cryptographique de la VC (did:web) est déléguée à
-l'IdP en v1 — point ouvert, cf. spec §7.6.
+`Authorization: Bearer|DPoP <token>` → claims via OIDC userinfo (`idpUserinfoUrl`) or, for
+TCK/test, `devTokens` (JSON token → claims, not to be used in production). 401 +
+`WWW-Authenticate` if missing. Cryptographic verification of the VC (did:web) is delegated to
+the IdP in v1 — open point, cf. spec §7.6.

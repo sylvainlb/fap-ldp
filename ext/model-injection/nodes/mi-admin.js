@@ -1,12 +1,12 @@
-// mi-admin.js — nœud fap-ldp-mi-admin (ext/model-injection, E11) : endpoints admin du contrat
-// d'injection (spec model-injection-spec.md v0.3 §3.1).
-//   POST   /admin/apps            → install (une transaction, CA-B1/B2/B8)
-//   DELETE /admin/apps/<slug>     → révocation (CA-B4), If-Match/ETag sur la fiche meta
-//   GET    /apps/                 → conteneurs des packages installés (tout user authentifié)
-//   GET    /apps/<slug>/meta      → fiche package (version, contrat, état) + ETag
-// Les conteneurs LDP /apps/<slug>/<table>/ eux-mêmes sont servis par le PEP core via
-// dsp.asset_mapping (le core réserve /admin/, /apps/ et /apps/<slug>/meta à cette ext).
-// v1 : écriture = rôle admin seul (§3.2) ; erreurs JSON-LD dspace:Error (CA-B2).
+// mi-admin.js — fap-ldp-mi-admin node (ext/model-injection, E11): admin endpoints of the
+// injection contract (spec model-injection-spec.md v0.3 §3.1).
+//   POST   /admin/apps            → install (one transaction, AC-B1/B2/B8)
+//   DELETE /admin/apps/<slug>     → revocation (AC-B4), If-Match/ETag on the meta record
+//   GET    /apps/                 → containers of installed packages (any authenticated user)
+//   GET    /apps/<slug>/meta      → package record (version, contract, state) + ETag
+// The LDP containers /apps/<slug>/<table>/ themselves are served by the core PEP via
+// dsp.asset_mapping (the core reserves /admin/, /apps/ and /apps/<slug>/meta for this ext).
+// v1: writes = admin role only (§3.2); JSON-LD dspace:Error errors (AC-B2).
 const { createPool } = require('./lib/pgpool-lite');
 const { claimsFromRequest } = require('./lib/auth');
 const { installPackage, revokePackage, listPackages, packageMeta, HttpError } = require('./lib/installer');
@@ -17,10 +17,10 @@ module.exports = function (RED) {
     RED.nodes.createNode(this, config);
     const node = this;
     node.baseIri = (config.baseIri || 'http://localhost:1880/').replace(/\/?$/, '/');
-    node.pool = createPool(config); // rôle admin (DDL = migration)
+    node.pool = createPool(config); // admin role (DDL = migration)
     node.devTokens = safeJson(config.devTokens);
     node.idpUserinfoUrl = (config.idpUserinfoUrl && config.idpUserinfoUrl !== 'false') ? config.idpUserinfoUrl : '';
-    node.maxPackages = parseInt(config.maxPackages, 10) || 50; // quota pod (§4.5, §9)
+    node.maxPackages = parseInt(config.maxPackages, 10) || 50; // pod quota (§4.5, §9)
 
     RED.httpNode.disable('etag');
 
@@ -85,7 +85,7 @@ module.exports = function (RED) {
         return sendError(res, 401, 'Unauthorized', 'authentication required');
       }
 
-      // ---------- GET /apps/ et GET /apps/<slug>/meta : tout user authentifié du pod (§3.1) ----------
+      // ---------- GET /apps/ and GET /apps/<slug>/meta: any authenticated pod user (§3.1) ----------
       if (method === 'GET' && route.isAppsList) {
         const pkgs = await listPackages(node.pool);
         const members = pkgs.filter(p => p.state === 'installed')
@@ -99,7 +99,7 @@ module.exports = function (RED) {
       }
       if (method === 'GET' && route.slugMeta) {
         const meta = await packageMeta(node.pool, route.slugMeta);
-        if (!meta) return sendError(res, 404, 'NotFound', `package "${route.slugMeta}" inconnu`);
+        if (!meta) return sendError(res, 404, 'NotFound', `unknown package "${route.slugMeta}"`);
         const doc = {
           '@context': { dspace: 'https://www.w3.org/ns/dspace#' },
           '@id': node.baseIri + 'apps/' + meta.slug + '/meta',
@@ -111,8 +111,8 @@ module.exports = function (RED) {
         return sendJsonLd(res, 200, doc, { ETag: etagOf(meta) });
       }
 
-      // ---------- écriture : rôle admin seul en v1 (§3.2) ----------
-      if (claims.role !== 'admin') return sendError(res, 403, 'Forbidden', 'rôle admin requis (v1, §3.2)');
+      // ---------- write: admin role only in v1 (§3.2) ----------
+      if (claims.role !== 'admin') return sendError(res, 403, 'Forbidden', 'admin role required (v1, §3.2)');
 
       if (method === 'POST' && route.isAdmin && req.path === '/admin/apps') {
         const body = req.body || {};
@@ -130,8 +130,8 @@ module.exports = function (RED) {
             slug: out.slug, agreement_id: out.agreement_id, tables: out.tables, state: 'installed'
           });
         } catch (e) {
-          if (e instanceof FragmentError) return sendError(res, 422, e.code, e.message);   // CA-B2
-          if (e instanceof HttpError) return sendError(res, e.status, e.code, e.message);  // CA-B8 (409)
+          if (e instanceof FragmentError) return sendError(res, 422, e.code, e.message);   // AC-B2
+          if (e instanceof HttpError) return sendError(res, e.status, e.code, e.message);  // AC-B8 (409)
           throw e;
         }
       }
@@ -139,10 +139,10 @@ module.exports = function (RED) {
       if (method === 'DELETE' && route.isAdmin) {
         const slug = req.path.split('/').pop();
         const meta = await packageMeta(node.pool, slug);
-        if (!meta) return sendError(res, 404, 'NotFound', `package "${slug}" inconnu`);
+        if (!meta) return sendError(res, 404, 'NotFound', `unknown package "${slug}"`);
         const etag = etagOf(meta);
         if (req.headers['if-match'] && req.headers['if-match'] !== etag && req.headers['if-match'] !== '*')
-          return sendError(res, 412, 'PreconditionFailed', 'If-Match: ETag obsolète');
+          return sendError(res, 412, 'PreconditionFailed', 'If-Match: stale ETag');
         try {
           await revokePackage(node.pool, slug, claims.webid || claims.did);
           return res.status(204).end();

@@ -1,12 +1,12 @@
--- 001_mi_maintenance.sql — ext/model-injection (E11) : purge fragment-aware après révocation.
+-- 001_mi_maintenance.sql — ext/model-injection (E11): fragment-aware purge after revocation.
 --
--- L'ext ne modifie PAS le core (règle ext/ : aucun changement au core) : la spec §6 demandait de
--- rendre 006_maintenance.sql « fragment-aware » ; on livre ici l'équivalent côté ext.
--- La purge des tombstones (30 j) fonctionne déjà pour les tables store_* via le core
--- (app.purge_old_tombstones itère app.tombstones, et le trigger tombstone_trigger y enregistre
--- TG_TABLE_NAME = store_<slug>_<table>, pk id imposé par la validation du fragment).
--- Ici : drop des tables store_<slug>_* d'un package révoqué depuis plus que la rétention,
--- ou archive selon la policy du contrat (facis:retention = drop|archive30d, spec §9).
+-- The ext does NOT modify the core (ext/ rule: no change to the core): spec §6 asked to make
+-- 006_maintenance.sql "fragment-aware"; the equivalent is delivered here on the ext side.
+-- The tombstone purge (30 days) already works for the store_* tables via the core
+-- (app.purge_old_tombstones iterates app.tombstones, and the tombstone_trigger records
+-- TG_TABLE_NAME = store_<slug>_<table> there, pk id enforced by fragment validation).
+-- Here: drop of the store_<slug>_* tables of a package revoked for longer than the retention,
+-- or archive depending on the contract policy (facis:retention = drop|archive30d, spec §9).
 
 CREATE OR REPLACE FUNCTION app.mi_drop_revoked_packages(retention interval DEFAULT interval '30 days')
 RETURNS integer AS $$
@@ -23,7 +23,7 @@ BEGIN
     WHERE state = 'revoked' AND revoked_at < now() - retention
   LOOP
     SELECT policy_jsonld INTO policy FROM dsp.contracts WHERE agreement_id = r.contract_id;
-    -- archive30d : on garde les tables (l'admin archive manuellement) ; drop : on lâche tout
+    -- archive30d: keep the tables (the admin archives manually); drop: drop everything
     IF coalesce(policy->>'facis:retention', 'drop') = 'drop' THEN
       FOR t IN SELECT jsonb_object_keys(r.model_fragment->'tables') AS table_name
       LOOP
@@ -32,19 +32,19 @@ BEGIN
         n := n + d;
       END LOOP;
     END IF;
-    -- dans tous les cas : les mappings restent (published=false posé à la révocation, §6)
+    -- in all cases: the mappings stay (published=false set at revocation, §6)
   END LOOP;
   RETURN n;
 END $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Planification pg_cron si disponible (profil light l'embarque), comme 006_maintenance.sql
+-- pg_cron scheduling if available (light profile embeds it), like 006_maintenance.sql
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
     IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'fap-ldp-mi-drop-revoked') THEN
       PERFORM cron.schedule(
         'fap-ldp-mi-drop-revoked',
-        '0 4 * * 0',                               -- dimanche 04:00 (après la purge 03:00)
+        '0 4 * * 0',                               -- Sunday 04:00 (after the 03:00 purge)
         'SELECT app.mi_drop_revoked_packages()');
     END IF;
   END IF;

@@ -1,5 +1,5 @@
-// fragment.test.js — tests unitaires du validateur/compilateur de fragments (ext/model-injection).
-// Sans dépendance externe ni PG : node --test ext/model-injection/tck/fragment.test.js
+// fragment.test.js — unit tests of the fragment validator/compiler (ext/model-injection).
+// No external dependency, no PG: node --test ext/model-injection/tck/fragment.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
@@ -8,7 +8,7 @@ const {
   FragmentError, quoteIdent, quoteLiteral, physicalTable, QUOTAS
 } = require(path.join(__dirname, '..', 'nodes', 'lib', 'fragment'));
 
-// Fragment exemple de l'annexe A de la spec (valide)
+// Example fragment from annex A of the spec (valid)
 const EXAMPLE = {
   tables: {
     vehicules: {
@@ -27,22 +27,22 @@ const EXAMPLE = {
   }
 };
 
-test('exemple annexe A : valide', () => {
+test('annex A example: valid', () => {
   assert.equal(validateFragment(EXAMPLE, JSON.stringify(EXAMPLE).length), true);
 });
 
-test('préfixe : store_<slug>_<table> dans le schéma app', () => {
+test('prefix: store_<slug>_<table> in the app schema', () => {
   assert.equal(physicalTable('flotte', 'vehicules'), 'store_flotte_vehicules');
   const c = compileFragment('flotte', EXAMPLE);
   assert.ok(c.tables[0].statements[0].includes('CREATE TABLE IF NOT EXISTS app."store_flotte_vehicules"'));
 });
 
-test('slug invalide → invalid_identifier', () => {
+test('invalid slug → invalid_identifier', () => {
   assert.throws(() => compileFragment('Bad-Slug', EXAMPLE),
     e => e instanceof FragmentError && e.code === 'invalid_identifier');
 });
 
-test('nom de table/ champ hors regex → invalid_identifier', () => {
+test('table/field name outside regex → invalid_identifier', () => {
   const bad = JSON.parse(JSON.stringify(EXAMPLE));
   bad.tables['Bad Name'] = bad.tables.vehicules;
   assert.throws(() => validateFragment(bad), e => e.code === 'invalid_identifier');
@@ -51,7 +51,7 @@ test('nom de table/ champ hors regex → invalid_identifier', () => {
   assert.throws(() => validateFragment(bad2), e => e.code === 'invalid_identifier');
 });
 
-test('clé non autorisée → schema_violation (whitelist stricte, annexe A)', () => {
+test('unauthorized key → schema_violation (strict whitelist, annex A)', () => {
   const bad = JSON.parse(JSON.stringify(EXAMPLE));
   bad.tables.vehicules.evil = 'DROP TABLE auth.acl';
   assert.throws(() => validateFragment(bad), e => e.code === 'schema_violation');
@@ -60,28 +60,28 @@ test('clé non autorisée → schema_violation (whitelist stricte, annexe A)', (
   assert.throws(() => validateFragment(bad2), e => e.code === 'schema_violation');
 });
 
-test('type de champ hors whitelist → schema_violation', () => {
+test('field type outside whitelist → schema_violation', () => {
   const bad = JSON.parse(JSON.stringify(EXAMPLE));
   bad.tables.vehicules.fields.prix = { type: 'regclass' };
   assert.throws(() => validateFragment(bad), e => e.code === 'schema_violation');
 });
 
-test('fk entre packages / hors users → blacklisted_effect (§4.4)', () => {
+test('fk between packages / other than users → blacklisted_effect (§4.4)', () => {
   const bad = JSON.parse(JSON.stringify(EXAMPLE));
   bad.tables.vehicules.fields.prix = { type: 'bigint', fk: 'tickets' };
   assert.throws(() => validateFragment(bad), e => e.code === 'blacklisted_effect');
 });
 
-test('pk non "id" ou non serial → schema_violation (triggers du socle, v1)', () => {
+test('pk not "id" or not serial → schema_violation (base triggers, v1)', () => {
   const bad = JSON.parse(JSON.stringify(EXAMPLE));
   bad.tables.vehicules.pk = 'immatriculation';
   assert.throws(() => validateFragment(bad), e => e.code === 'schema_violation');
   const bad2 = JSON.parse(JSON.stringify(EXAMPLE));
-  bad2.tables.vehicules.fields.id = { type: 'bigint' }; // sans serial
+  bad2.tables.vehicules.fields.id = { type: 'bigint' }; // without serial
   assert.throws(() => validateFragment(bad2), e => e.code === 'schema_violation');
 });
 
-test('quotas : >10 tables → quota_exceeded ; payload >256 Ko → quota_exceeded', () => {
+test('quotas: >10 tables → quota_exceeded; payload >256 KB → quota_exceeded', () => {
   const big = { tables: {} };
   for (let i = 0; i < QUOTAS.maxTables + 1; i++) {
     big.tables['t' + i] = { pk: 'id', fields: { id: { type: 'bigint', serial: true } } };
@@ -90,27 +90,27 @@ test('quotas : >10 tables → quota_exceeded ; payload >256 Ko → quota_exceede
   assert.throws(() => validateFragment(EXAMPLE, QUOTAS.maxPayloadBytes + 1), e => e.code === 'quota_exceeded');
 });
 
-test('anti-injection littéraux (§4.6) : check_in et default émis via quote_literal', () => {
+test('literal anti-injection (§4.6): check_in and default emitted via quote_literal', () => {
   const evil = JSON.parse(JSON.stringify(EXAMPLE));
   evil.tables.vehicules.fields.type.check_in = ["voiture', 'x'); DROP TABLE auth.acl;--"];
   evil.tables.vehicules.fields.prix.default = "1); DROP TABLE dsp.contracts;--";
-  validateFragment(evil); // valide (les littéraux sont sûrs une fois échappés)
+  validateFragment(evil); // valid (literals are safe once escaped)
   const c = compileFragment('flotte', evil);
   const ddl = c.tables[0].statements.join('\n');
-  // la tentative d'injection apparaît échappée ('' doublés), jamais crue
-  assert.ok(ddl.includes("'voiture'', ''x''); DROP TABLE auth.acl;--'"), 'check_in échappé via quote_literal');
-  assert.ok(ddl.includes("DEFAULT '1); DROP TABLE dsp.contracts;--'"), 'default chaîne non whitelisté → quote_literal');
-  // la séquence non échappée (qui sortirait du littéral SQL) ne doit jamais apparaître
-  assert.ok(!ddl.includes("voiture', 'x'); DROP"), 'pas de littéral cru non échappé');
+  // the injection attempt appears escaped ('' doubled), never raw
+  assert.ok(ddl.includes("'voiture'', ''x''); DROP TABLE auth.acl;--'"), 'check_in escaped via quote_literal');
+  assert.ok(ddl.includes("DEFAULT '1); DROP TABLE dsp.contracts;--'"), 'non-whitelisted string default → quote_literal');
+  // the unescaped sequence (which would break out of the SQL literal) must never appear
+  assert.ok(!ddl.includes("voiture', 'x'); DROP"), 'no raw unescaped literal');
 });
 
-test('default now()/true/false/number émis tel quel (§4.6 whitelist)', () => {
+test('default now()/true/false/number emitted as-is (§4.6 whitelist)', () => {
   const c = compileFragment('flotte', EXAMPLE);
   const ddl = c.tables[0].statements.join('\n');
   assert.ok(ddl.includes('DEFAULT now()'));
 });
 
-test('tous les identifiants sont quotés (quote_ident) dans le DDL', () => {
+test('all identifiers are quoted (quote_ident) in the DDL', () => {
   const c = compileFragment('flotte', EXAMPLE);
   for (const stmt of c.tables[0].statements) {
     if (stmt.startsWith('CREATE TABLE')) {
@@ -121,10 +121,10 @@ test('tous les identifiants sont quotés (quote_ident) dans le DDL', () => {
   }
 });
 
-test('RLS + mapping : conteneur logique /apps/<slug>/<table>/ (pas le nom physique)', () => {
+test('RLS + mapping: logical container /apps/<slug>/<table>/ (not the physical name)', () => {
   const c = compileFragment('flotte', EXAMPLE);
   const ddl = c.tables[0].statements.join('\n');
-  assert.ok(ddl.includes("'/apps/flotte/vehicules/'"), 'IRI logique dans les policies RLS');
+  assert.ok(ddl.includes("'/apps/flotte/vehicules/'"), 'logical IRI in the RLS policies');
   assert.ok(ddl.includes('FORCE ROW LEVEL SECURITY'));
   assert.ok(ddl.includes('CREATE POLICY store_flotte_vehicules_read'));
   assert.equal(c.tables[0].container, '/apps/flotte/vehicules/');
@@ -132,32 +132,32 @@ test('RLS + mapping : conteneur logique /apps/<slug>/<table>/ (pas le nom physiq
   assert.equal(c.tables[0].published, true);
 });
 
-test('triggers du socle posés selon déclaration (outbox/tombstone/updated_at)', () => {
+test('base triggers set per declaration (outbox/tombstone/updated_at)', () => {
   const c = compileFragment('flotte', EXAMPLE);
   const ddl = c.tables[0].statements.join('\n');
   for (const t of ['set_updated_at', 'versioning', 'tombstone', 'outbox'])
     assert.ok(ddl.includes(`CREATE TRIGGER ${t} `), `trigger ${t}`);
-  // sans outbox déclaré → pas de trigger outbox
+  // without outbox declared → no outbox trigger
   const noOutbox = JSON.parse(JSON.stringify(EXAMPLE));
   delete noOutbox.tables.vehicules.outbox;
   const c2 = compileFragment('flotte', noOutbox);
   assert.ok(!c2.tables[0].statements.join('\n').includes('CREATE TRIGGER outbox '));
 });
 
-test('hash canonique stable (ordre des clés indifférent) et sensible aux changements', () => {
+test('canonical hash stable (key order irrelevant) and sensitive to changes', () => {
   const h1 = fragmentHash(EXAMPLE);
   const shuffled = { tables: { vehicules: JSON.parse(JSON.stringify(EXAMPLE.tables.vehicules)) } };
-  // réordonne les champs
+  // shuffle the fields
   const entries = Object.entries(shuffled.tables.vehicules.fields).reverse();
   shuffled.tables.vehicules.fields = Object.fromEntries(entries);
-  assert.equal(fragmentHash(shuffled), h1, 'hash stable malgré le réordonnancement');
+  assert.equal(fragmentHash(shuffled), h1, 'hash stable despite reshuffling');
   const changed = JSON.parse(JSON.stringify(EXAMPLE));
   changed.tables.vehicules.fields.prix.not_null = true;
-  assert.notEqual(fragmentHash(changed), h1, 'hash change si le schéma change (drift)');
+  assert.notEqual(fragmentHash(changed), h1, 'hash changes when the schema changes (drift)');
   assert.equal(canonicalForCompare(EXAMPLE), stableStringify(JSON.parse(stableStringify({ tables: Object.fromEntries(Object.entries(EXAMPLE.tables).map(([k, v]) => [k, { pk: v.pk, fields: Object.fromEntries(Object.entries(v.fields).map(([f, d]) => [f, { type: d.type, serial: !!d.serial, not_null: !!d.not_null || !!d.serial }])) }])) }))));
 });
 
-test('quoteIdent/quoteLiteral : échappement standard PG', () => {
+test('quoteIdent/quoteLiteral: standard PG escaping', () => {
   assert.equal(quoteIdent('users'), '"users"');
   assert.equal(quoteLiteral("a'b"), "'a''b'");
 });

@@ -1,10 +1,10 @@
-// ldp-container.js — nœud conteneur LDP (PEP), spec fap-ldp v0.2 §6
-// Enregistre un middleware sur RED.httpNode (le serveur HTTP d'ORCE, derrière caddy en 443).
-// Routes : GET/POST/PUT/DELETE/PATCH sur ressources & containers, GET/PUT <res>.acl,
+// ldp-container.js — LDP container node (PEP), spec fap-ldp v0.2 §6
+// Registers a middleware on RED.httpNode (ORCE's HTTP server, behind caddy on 443).
+// Routes: GET/POST/PUT/DELETE/PATCH on resources & containers, GET/PUT <res>.acl,
 // ETag (W/"...") + If-Match/If-None-Match (412/304), PATCH = JSON Merge Patch (RFC 7386),
-// erreurs JSON-LD dspace:Error, 401 + WWW-Authenticate si non authentifié, 403 si non autorisé.
-// Mapping conteneur ↔ table via dsp.asset_mapping ; contexte de session posé par transaction
-// (SET LOCAL app.webid/role/base_iri) → RLS filtre les lignes.
+// JSON-LD dspace:Error errors, 401 + WWW-Authenticate if unauthenticated, 403 if unauthorized.
+// Container ↔ table mapping via dsp.asset_mapping; session context set per transaction
+// (SET LOCAL app.webid/role/base_iri) → RLS filters rows.
 const crypto = require('crypto');
 const { createPool, withSession } = require('../lib/pgpool');
 const jsonld = require('../lib/jsonld');
@@ -18,7 +18,7 @@ module.exports = function (RED) {
     RED.nodes.createNode(this, config);
     const node = this;
     node.baseIri = (config.baseIri || 'http://localhost:1880/').replace(/\/?$/, '/');
-    // décision K (v0.4, CA-L15) : règles métier (transitions) déclarées dans le model du déploiement
+    // decision K (v0.4, AC-L15): business rules (transitions) declared in the deployment's model
     try {
       const modelPath = config.modelPath || process.env.FAP_LDP_CONFIG || '/config/model.json';
       node.businessRules = (JSON.parse(require('fs').readFileSync(modelPath, 'utf8')).business_rules) || [];
@@ -26,29 +26,29 @@ module.exports = function (RED) {
     node.podOrg = config.podOrg || '';
     node.catalogPath = config.catalogPath || '/dsp/catalogue';
     node.pool = createPool(config);
-    // Lectures gold via le rôle reader si configuré (moindre privilège, spec §7.5), sinon même pool
+    // Gold reads via the reader role if configured (least privilege, spec §7.5), otherwise same pool
     node.poolRead = config.pgReaderUser
       ? createPool({ ...config, pgUser: config.pgReaderUser, pgPassword: config.pgReaderPassword || config.pgPassword })
       : node.pool;
     node.pdp = RED.nodes.getNode(config.pdp);
-    node.devTokens = safeJson(config.devTokens); // test/TCK uniquement : token → claims
-    // "false"/vide (IDP_EXTERNAL=false en compose) = pas d'IdP externe configuré
+    node.devTokens = safeJson(config.devTokens); // test/TCK only: token → claims
+    // "false"/empty (IDP_EXTERNAL=false in compose) = no external IdP configured
     node.idpUserinfoUrl = (config.idpUserinfoUrl && config.idpUserinfoUrl !== 'false') ? config.idpUserinfoUrl : '';
-    node.vcTrustAnchors = safeJson(config.vcTrustAnchors || '[]');   // préfixes did:web de confiance (spec §7.6)
-    node.vcDidDocs = safeJson(config.vcDidDocs || '{}');             // override de test : did → document DID (clé publique JWK)
-    node.goldMaxRows = parseInt(config.goldMaxRows, 10) || 10000; // décision G : garde volumétrie gold
+    node.vcTrustAnchors = safeJson(config.vcTrustAnchors || '[]');   // trusted did:web prefixes (spec §7.6)
+    node.vcDidDocs = safeJson(config.vcDidDocs || '{}');             // test override: did → DID document (public JWK key)
+    node.goldMaxRows = parseInt(config.goldMaxRows, 10) || 10000; // decision G: gold volume guard
     node.mappings = null;      // cache dsp.asset_mapping
     node.mappingsAt = 0;
-    node.columns = {};         // cache colonnes par schema.table
+    node.columns = {};         // column cache per schema.table
 
-    if (!node.pdp) { node.error('nœud PDP non configuré'); return; }
+    if (!node.pdp) { node.error('PDP node not configured'); return; }
 
-    RED.httpNode.disable('etag'); // nos ETag LDP (W/"...") sont posés explicitement, pas le hash express
+    RED.httpNode.disable('etag'); // our LDP ETags (W/"...") are set explicitly, not the express hash
 
     RED.httpNode.use((req, res, next) => {
-      if (req.path.startsWith('/dsp/') || req.path.startsWith('/app/') || req.path.startsWith('/red') || req.path.startsWith('/editor')) return next(); // /app/ = proxy signé POST /app/query (C1.9/D-8) + front statique servi par caddy
-      // Réservé à ext/model-injection (E11) : endpoints admin + listing/méta des packages.
-      // Les conteneurs LDP /apps/<slug>/<table>/ restent servis ici via dsp.asset_mapping.
+      if (req.path.startsWith('/dsp/') || req.path.startsWith('/app/') || req.path.startsWith('/red') || req.path.startsWith('/editor')) return next(); // /app/ = signed POST /app/query proxy (C1.9/D-8) + static front served by caddy
+      // Reserved for ext/model-injection (E11): admin endpoints + package listing/meta.
+      // The LDP containers /apps/<slug>/<table>/ remain served here via dsp.asset_mapping.
       if (req.path.startsWith('/admin/')
           || /^\/apps\/?$/.test(req.path)
           || /^\/apps\/[^/]+\/meta$/.test(req.path)) return next();
@@ -71,8 +71,8 @@ module.exports = function (RED) {
 
     function safeJson(s) { try { return s ? JSON.parse(s) : {}; } catch { return {}; } }
 
-    // Body JSON : Node-RED pose req.body à Buffer/string pour application/*+json selon la config ;
-    // on normalise ici (ne pas dépendre du body-parser global).
+    // JSON body: Node-RED sets req.body to a Buffer/string for application/*+json depending on
+    // config; we normalize here (do not depend on the global body-parser).
     function ensureBody(req) {
       if (Buffer.isBuffer(req.body)) {
         try { req.body = JSON.parse(req.body.toString('utf8')); } catch (e) { return Promise.reject(e); }
@@ -141,7 +141,7 @@ module.exports = function (RED) {
       return r.rows;
     }
 
-    // chemin → {kind: 'root'|'container'|'resource'|'acl', mapping?, params?, resourcePath, containerPath, pkValues}
+    // path → {kind: 'root'|'container'|'resource'|'acl', mapping?, params?, resourcePath, containerPath, pkValues}
     async function resolve(p) {
       if (p === '/' || p === '') return { kind: 'root', resourcePath: '/', containerPath: '/' };
       let path = p;
@@ -153,7 +153,7 @@ module.exports = function (RED) {
           if (m.containerRe.test(path)) {
             const params = {};
             const segs = path.slice(1, -1).split('/');
-            // ex. /tickets/*/comments/ → param parent_fk (1er placeholder du pattern) = segs[starIdx]
+            // e.g. /tickets/*/comments/ → parent_fk param (1st pattern placeholder) = segs[starIdx]
             const starIdx = m.container_uri.slice(1, -1).split('/').indexOf('*');
             if (starIdx >= 0 && segs[starIdx] !== undefined && m.resourceParams[0]) {
               params[m.resourceParams[0]] = segs[starIdx];
@@ -161,10 +161,10 @@ module.exports = function (RED) {
             return { kind: 'container', mapping: m, params, resourcePath: path, containerPath: path, isAcl };
           }
         }
-        // tolérance slash final (CA-L12, décision J) : /tickets/482/ ≡ /tickets/482
+        // trailing-slash tolerance (AC-L12, decision J): /tickets/482/ ≡ /tickets/482
         path = path.slice(0, -1);
       }
-      // ressource : plus long préfixe de conteneur correspondant
+      // resource: longest matching container prefix
       for (const m of [...mappings].sort((a, b) => b.container_uri.length - a.container_uri.length)) {
         if (m.resourceRe && m.resourceRe.test(path)) {
           const values = path.match(m.resourceRe).slice(1);
@@ -182,7 +182,7 @@ module.exports = function (RED) {
       const m = h.match(/^(?:Bearer|DPoP)\s+(.+)$/i);
       if (!m) return { token: null, claims: null };
       const token = m[1].trim();
-      // VC en JWT (spec §7.6) : vérifiée cryptographiquement si c'en est une, 401 si invalide
+      // VC in JWT form (spec §7.6): cryptographically verified if it is one, 401 if invalid
       try {
         const vcClaims = await vc.verifyVc(token, { trustAnchors: node.vcTrustAnchors, didDocOverrides: node.vcDidDocs });
         if (vcClaims) return { token, claims: vcClaims };
@@ -211,7 +211,7 @@ module.exports = function (RED) {
       await ensureBody(req);
       const parsed = await resolve(req.path);
 
-      // racine : conteneur racine, membres = conteneurs publiés uniquement (spec §6.5)
+      // root: root container, members = published containers only (spec §6.5)
       if (parsed.kind === 'root') {
         if (method !== 'GET') return sendError(res, 405, 'MethodNotAllowed', method);
         const { token, claims } = await claimsFromRequest(req);
@@ -239,8 +239,8 @@ module.exports = function (RED) {
         : node.baseIri + parsed.resourcePath.replace(/^\//, '');
       const aclUri = resourceUri + '.acl';
 
-      // mode ACL : GET/HEAD → read ; POST → write (conteneur) ; PUT/PATCH/DELETE → write (ressource)
-      // .acl GET/PUT → control sur la ressource cible
+      // ACL mode: GET/HEAD → read; POST → write (container); PUT/PATCH/DELETE → write (resource)
+      // .acl GET/PUT → control on the target resource
       let mode;
       if (parsed.isAcl) mode = 'control';
       else if (method === 'GET') mode = 'read';
@@ -256,7 +256,7 @@ module.exports = function (RED) {
       });
       if (!decision.allow) return sendError(res, decision.status || 403, 'Forbidden', decision.reason);
 
-      // CA-L11 (décision J) : clé inline `permissions` calculée pour le demandeur
+      // AC-L11 (decision J): inline `permissions` key computed for the requester
       const perms = await node.pdp.permissions({
         claims,
         resourceUri: decisionTarget,
@@ -278,13 +278,13 @@ module.exports = function (RED) {
     async function handleContainer(req, res, method, parsed, claims, headers) {
       const m = parsed.mapping;
       if (method === 'GET') {
-        // décision G (spec §6.7) : un conteneur gold volumineux n'est PAS servi en LDP brut
+        // decision G (spec §6.7): a large gold container is NOT served as raw LDP
         if (m.table_schema === 'gold' && node.goldMaxRows) {
           const cnt = await withSession(poolFor(m), claims, node.baseIri, async client =>
             (await client.query(`SELECT count(*)::int AS n FROM ${m.table_schema}.${m.table_name}`)).rows[0].n);
           if (cnt > node.goldMaxRows) {
             return sendError(res, 403, 'GoldContainerTooLarge',
-              `conteneur gold volumineux (${cnt} lignes) : lire via le data plane DSP (/dsp/data, from/to, LIMIT 5000) — spec §6.7`);
+              `large gold container (${cnt} rows): read via the DSP data plane (/dsp/data, from/to, LIMIT 5000) — spec §6.7`);
           }
         }
         const rows = await withSession(poolFor(m), claims, node.baseIri, async client => {
@@ -292,13 +292,13 @@ module.exports = function (RED) {
           const cond = [];
           if (await hasColumn(m.table_schema, m.table_name, 'deleted_at')) cond.push('t.deleted_at IS NULL');
           if (m.container_uri.includes('*')) {
-            // conteneur imbriqué ex. /tickets/37/comments/ → filtre sur le param
+            // nested container e.g. /tickets/37/comments/ → filter on the param
             cond.push(`t.${Object.keys(parsed.params)[0]} = $1`);
             q += ' WHERE ' + cond.join(' AND ');
             return (await client.query(q, [Object.values(parsed.params)[0]])).rows;
           }
           if (cond.length) q += ' WHERE ' + cond.join(' AND ');
-          const pk = pkColumn(m);   // dernier placeholder du resource_iri_pattern (matviews gold sans colonne id)
+          const pk = pkColumn(m);   // last placeholder of resource_iri_pattern (gold matviews without an id column)
           q += ` ORDER BY t.${pk} LIMIT 5000`;
           return (await client.query(q)).rows;
         });
@@ -320,7 +320,7 @@ module.exports = function (RED) {
         const cols = await tableColumns(m.table_schema, m.table_name);
         const names = Object.keys(row).filter(k => cols.some(c => c.column_name === k));
         if (names.length === 0) return sendError(res, 400, 'BadRequest', 'no known column');
-        // décision K (CA-L15) : règle on_create (ex. statut OPEN réservé au rôle gestionnaire)
+        // decision K (AC-L15): on_create rule (e.g. status OPEN reserved for the manager role)
         const brErr = validateTransition(node.businessRules, m.table_name, {}, row, claims);
         if (brErr) return sendError(res, 409, 'invalid_transition', brErr);
         const pk = pkColumn(m);
@@ -329,7 +329,7 @@ module.exports = function (RED) {
                      VALUES (${names.map((_, i) => '$' + (i + 1)).join(',')})
                      RETURNING to_jsonb(${m.table_name}.*) AS doc`;
           const r = (await client.query(q, names.map(n => row[n]))).rows[0];
-          // ACL initiale : le créateur a control (et read/write) sur sa ressource (spec §7.3)
+          // Initial ACL: the creator gets control (and read/write) on its resource (spec §7.3)
           const iri = node.baseIri + m.container_uri.replace(/^\//, '') + r.doc[pk];
           if (claims.webid) {
             await client.query(
@@ -346,7 +346,7 @@ module.exports = function (RED) {
       return sendError(res, 405, 'MethodNotAllowed', method);
     }
 
-    // ---------- ressources ----------
+    // ---------- resources ----------
 
     async function handleResource(req, res, method, parsed, claims, headers) {
       const m = parsed.mapping;
@@ -375,7 +375,7 @@ module.exports = function (RED) {
         return sendJsonLd(res, 200, doc);
       }
 
-      // PUT / PATCH / DELETE : If-Match → 412 si ETag obsolète (CA-L10)
+      // PUT / PATCH / DELETE: If-Match → 412 if ETag is stale (AC-L10)
       const current = await withSession(poolFor(m), claims, node.baseIri, async client => {
         const q = hasDeleted ? sel + ' AND t.deleted_at IS NULL' : sel;
         return (await client.query(q, pkValues)).rows[0];
@@ -383,11 +383,11 @@ module.exports = function (RED) {
       if (!current) return sendError(res, 404, 'NotFound', parsed.resourcePath);
       const etag = etagOf(current.doc);
       if (req.headers['if-match'] && req.headers['if-match'] !== etag && req.headers['if-match'] !== '*') {
-        return sendError(res, 412, 'PreconditionFailed', 'If-Match: ETag obsolète');
+        return sendError(res, 412, 'PreconditionFailed', 'If-Match: stale ETag');
       }
 
       if (method === 'DELETE') {
-        if (!hasDeleted) return sendError(res, 405, 'MethodNotAllowed', 'DELETE (table sans tombstone)');
+        if (!hasDeleted) return sendError(res, 405, 'MethodNotAllowed', 'DELETE (table without tombstone)');
         await withSession(poolFor(m), claims, node.baseIri, async client => {
           await client.query(`UPDATE ${m.table_schema}.${m.table_name} SET deleted_at = now() WHERE ${pkWhere} AND deleted_at IS NULL`, pkValues);
         });
@@ -402,7 +402,7 @@ module.exports = function (RED) {
           const row = jsonld.docToRow(body, m.table_schema, m.table_name);
           nextDoc = { ...current.doc, ...row };
         } else {
-          // PATCH v1 accepte JSON Merge Patch (RFC 7386) ET JSON Patch (RFC 6902) — décision F (CA-L10)
+          // PATCH v1 accepts JSON Merge Patch (RFC 7386) AND JSON Patch (RFC 6902) — decision F (AC-L10)
           res.set('Accept-Patch', 'application/merge-patch+json, application/json-patch+json');
           const ct = String(req.headers['content-type'] || '');
           const body = asJson(req);
@@ -412,12 +412,12 @@ module.exports = function (RED) {
           nextDoc = { ...current.doc, ...row };
         }
         delete nextDoc.deleted_at;
-        // décision K (CA-L15) : transition de statut invalide → 409 invalid_transition
+        // decision K (AC-L15): invalid status transition → 409 invalid_transition
         const brErr = validateTransition(node.businessRules, m.table_name, current.doc, nextDoc, claims);
         if (brErr) return sendError(res, 409, 'invalid_transition', brErr);
         const cols = await tableColumns(m.table_schema, m.table_name);
         const names = Object.keys(nextDoc).filter(k => k !== pk && cols.some(c => c.column_name === k));
-        // placeholders du WHERE décalés après ceux du SET
+        // WHERE placeholders shifted after the SET ones
         const off = names.length;
         const where = m.resourceParams.map((n, i) => `${n} = $${off + i + 1}`).join(' AND ');
         await withSession(poolFor(m), claims, node.baseIri, async client => {
@@ -458,7 +458,7 @@ module.exports = function (RED) {
               [r.resource_uri, r.subject, r.modes, r.inherited]);
           }
         });
-        // purge cache PDP (l'ACL a changé) — le trigger PG notifie déjà, double sécurité
+        // purge PDP cache (the ACL changed) — the PG trigger already notifies, double safety
         node.pdp.cache.clear();
         return sendJsonLd(res, 200, webacl.serialize(resourceUri, rows));
       }
@@ -482,7 +482,7 @@ module.exports = function (RED) {
     }
   }
 
-  // décision K : matrice des transitions déclarée dans config/model.json (business_rules)
+  // decision K: transition matrix declared in config/model.json (business_rules)
   function validateTransition(rules, table, oldDoc, newDoc, claims) {
     for (const r of (rules || [])) {
       if (r.table !== table || !r.field) continue;
@@ -494,10 +494,10 @@ module.exports = function (RED) {
       const okRole = (arr) => Array.isArray(arr) && arr.some(x => x === role || (x === 'assigned_to' && isAssigned));
       if (oldV === undefined || oldV === null) {
         const oc = r.on_create && r.on_create[newV];
-        if (!oc || !okRole(oc)) return 'création: statut ' + newV + ' non autorisé pour le rôle ' + (role || '?');
+        if (!oc || !okRole(oc)) return 'creation: status ' + newV + ' not allowed for role ' + (role || '?');
       } else {
         const t = r.transitions && r.transitions[oldV] && r.transitions[oldV][newV];
-        if (!t || !okRole(t)) return 'transition interdite: ' + oldV + ' → ' + newV;
+        if (!t || !okRole(t)) return 'forbidden transition: ' + oldV + ' → ' + newV;
       }
     }
     return null;

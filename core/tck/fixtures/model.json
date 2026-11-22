@@ -1,5 +1,5 @@
 {
- "$comment": "Exemple de modèle métier pour le déploiement 'supervision énergétique' (spec supervision-energetique-spec-fonctionnelle.md §4.1). Appliqué au boot par le nœud fap-ldp : crée les tables app.*, les triggers, les policies RLS, enregistre dsp.asset_mapping et crée les ACL initiales. Le SQL correspondant (validé sur Postgres 16) est dans 004_app.sql / 005_rls.sql de ce dossier.",
+ "$comment": "Example business model for the 'energy supervision' deployment (spec supervision-energetique-spec-fonctionnelle.md §4.1). Applied at boot by the fap-ldp node: creates the app.* tables, triggers, RLS policies, records dsp.asset_mapping and creates the initial ACLs. The corresponding SQL (validated on Postgres 16) is in 004_app.sql / 005_rls.sql in this folder.",
  "base_iri": "http://localhost:18880/",
  "tables": {
   "users": {
@@ -11,7 +11,7 @@
     "webid": "text unique not null",
     "name": "text not null",
     "email": "text unique",
-    "role": "text check in ('gestionnaire','technicien','admin')",
+    "role": "text check in ('manager','technician','admin')",
     "created_at": "timestamptz default now()",
     "updated_at": "timestamptz default now()"
    }
@@ -25,7 +25,7 @@
     "name": "text not null",
     "address": "text",
     "meter_id": "text",
-    "facis_asset": "text (IRI asset catalogue DSP)",
+    "facis_asset": "text (DSP catalog asset IRI)",
     "created_at": "timestamptz default now()",
     "updated_at": "timestamptz default now()",
     "lat": "double precision",
@@ -44,7 +44,7 @@
     "status": "text default 'OPEN' check in ('OPEN','IN_PROGRESS','RESOLVED','CLOSED')",
     "priority": "text",
     "building_id": "bigint fk buildings(id)",
-    "anomaly_ref": "text (IRI ligne gold)",
+    "anomaly_ref": "text (gold row IRI)",
     "created_by": "bigint fk users(id)",
     "assigned_to": "bigint fk users(id)",
     "created_at": "timestamptz default now()",
@@ -73,33 +73,33 @@
    "field": "status",
    "on_create": {
     "OPEN": [
-     "gestionnaire"
+     "manager"
     ]
    },
    "transitions": {
     "OPEN": {
      "IN_PROGRESS": [
-      "gestionnaire",
+      "manager",
       "assigned_to"
      ]
     },
     "IN_PROGRESS": {
      "RESOLVED": [
-      "gestionnaire",
+      "manager",
       "assigned_to"
      ]
     },
     "RESOLVED": {
      "CLOSED": [
-      "gestionnaire"
+      "manager"
      ],
      "IN_PROGRESS": [
-      "gestionnaire"
+      "manager"
      ]
     },
     "CLOSED": {
      "OPEN": [
-      "gestionnaire"
+      "manager"
      ]
     }
    }

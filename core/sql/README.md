@@ -1,54 +1,53 @@
-# core/sql — Migrations FAP-LDP (E1 + E3)
+# core/sql — FAP-LDP migrations (E1 + E3)
 
-Appliquer dans l'ordre, en superuser (`postgres`), sur le Postgres du déploiement
-(les migrations créent les schémas/rôles de l'extension sans toucher au cœur FAP) :
+Apply in order, as superuser (`postgres`), on the Postgres of the deployment
+(the migrations create the extension's schemas/roles without touching the FAP core):
 
 ```bash
 for f in core/sql/00*.sql; do psql -v ON_ERROR_STOP=1 -f "$f"; done
 ```
 
-| Fichier | Contenu |
+| File | Contents |
 |---|---|
-| `001_roles_schemas.sql` | Schémas `app`/`auth`/`dsp`, rôles `gate`/`app`/`materializer`/`reader`/`admin`, `REVOKE ALL FROM PUBLIC`, grants par rôle (moindre privilège) |
-| `002_auth.sql` | `auth.acl`, `auth.can(res, mode)`, trigger `pg_notify('fap_revoked')` sur changement d'ACL |
-| `003_dsp.sql` | `dsp.contracts`, `dsp.capacities`, `dsp.audit`, `dsp.asset_mapping`, trigger révocation contrat |
-| `004_app_socle.sql` | Socle générique : `app.versions`, `app.tombstones`, `app.outbox` + triggers génériques. **Aucun modèle métier** — les tables `app.<table>` sont créées au boot par le nœud depuis `config/model.json` du déploiement (exemples : `examples/`) |
-| `005_rls.sql` | Conventions RLS génériques (le PEP pose `app.base_iri`/`app.webid`/`app.role`) ; les policies par table sont créées au boot par le nœud (exemple : `examples/supervision/005_rls.sql`) |
-| `006_maintenance.sql` | Purge RGPD (rétention 30 j, pg_cron hebdo) — `SECURITY DEFINER` |
-| `007_seed_asset_mapping.sql` | Mapping conteneurs `/gold/<table>/` du cœur (publié=false par défaut ; publication déclarée côté catalogue cœur) |
+| `001_roles_schemas.sql` | Schemas `app`/`auth`/`dsp`, roles `gate`/`app`/`materializer`/`reader`/`admin`, `REVOKE ALL FROM PUBLIC`, grants per role (least privilege) |
+| `002_auth.sql` | `auth.acl`, `auth.can(res, mode)`, trigger `pg_notify('fap_revoked')` on ACL change |
+| `003_dsp.sql` | `dsp.contracts`, `dsp.capacities`, `dsp.audit`, `dsp.asset_mapping`, contract revocation trigger |
+| `004_app_socle.sql` | Generic base: `app.versions`, `app.tombstones`, `app.outbox` + generic triggers. **No business model** — the `app.<table>` tables are created at boot by the node from the deployment's `config/model.json` (examples: `examples/`) |
+| `005_rls.sql` | Generic RLS conventions (the PEP sets `app.base_iri`/`app.webid`/`app.role`); per-table policies are created at boot by the node (example: `examples/supervision/005_rls.sql`) |
+| `006_maintenance.sql` | GDPR purge (30-day retention, weekly pg_cron) — `SECURITY DEFINER` |
+| `007_seed_asset_mapping.sql` | Mapping of core containers `/gold/<table>/` (published=false by default; publication declared on the core catalog side) |
 
-Les modèles métier (tables `app.<table>`, triggers, policies RLS) ne sont PAS dans `core/` :
-voir `examples/` (ex. `examples/supervision/` : `model.json` + SQL équivalents).
+Business models (tables `app.<table>`, triggers, RLS policies) are NOT in `core/`:
+see `examples/` (e.g. `examples/supervision/`: `model.json` + equivalent SQL).
 
-## Conventions posées par le PEP (rôle `app`)
+## Conventions set by the PEP (role `app`)
 
-Dans chaque transaction, avant toute requête :
+In each transaction, before any query:
 
 ```sql
-SET LOCAL app.base_iri = 'https://<pod>/';   -- slash final toléré (rtrim dans les policies)
-SET LOCAL app.webid    = '<webid du token>';
-SET LOCAL app.role     = '<role du token>';
+SET LOCAL app.base_iri = 'https://<pod>/';   -- trailing slash tolerated (rtrim in the policies)
+SET LOCAL app.webid    = '<webid from the token>';
+SET LOCAL app.role     = '<role from the token>';
 ```
 
-Claim absent → `current_setting(..., true)` = NULL → `auth.can` = false → deny silencieux.
+Missing claim → `current_setting(..., true)` = NULL → `auth.can` = false → silent deny.
 
-## Points de conception actés (validés sur Postgres 16)
+## Recorded design decisions (validated on Postgres 16)
 
-- **Héritage ACL** : `inherited` ne s'applique qu'aux conteneurs (slash final), via
-  `starts_with` — une ACL sur `/tickets/37` ne couvre pas `/tickets/370`.
-- **RLS = autorisation pure** : le filtre `deleted_at IS NULL` n'est PAS dans les policies
-  (PostgreSQL exige sur UPDATE que la nouvelle ligne satisfasse aussi le USING des policies
-  SELECT — cela bloquerait le soft delete). Le filtrage des tombstones est fait par le PEP
+- **ACL inheritance**: `inherited` applies only to containers (trailing slash), via
+  `starts_with` — an ACL on `/tickets/37` does not cover `/tickets/370`.
+- **RLS = pure authorization**: the `deleted_at IS NULL` filter is NOT in the policies
+  (PostgreSQL requires on UPDATE that the new row also satisfies the USING of the SELECT
+  policies — this would block soft delete). Tombstone filtering is done by the PEP
   (`WHERE deleted_at IS NULL`).
-- **DELETE LDP = soft delete** : un unique `UPDATE ... SET deleted_at = now()` ; le trigger
-  `tombstone_trigger` enregistre `app.tombstones`. Purge physique en `006` (30 j).
-- **Révocation** : DELETE/UPDATE sur `dsp.contracts` ou `auth.acl` → `pg_notify('fap_revoked')`
-  → le PDP purge son cache de décision (CA-L9, < 1 s).
-- **RG-3** : écriture `app.*` → trigger outbox + `pg_notify('fap_ingest')` → flow ORCE → bronze.
-  Aucune écriture directe de l'app dans bronze/silver/gold.
+- **LDP DELETE = soft delete**: a single `UPDATE ... SET deleted_at = now()`; the
+  `tombstone_trigger` trigger records `app.tombstones`. Physical purge in `006` (30 days).
+- **Revocation**: DELETE/UPDATE on `dsp.contracts` or `auth.acl` → `pg_notify('fap_revoked')`
+  → the PDP purges its decision cache (AC-L9, < 1 s).
+- **RG-3**: `app.*` write → outbox trigger + `pg_notify('fap_ingest')` → ORCE flow → bronze.
+  No direct writes from the app into bronze/silver/gold.
 
 ## Validation
 
-Migrations + smoke test (auth.can, héritage, RLS, versioning, outbox, tombstone, purge)
-exécutés sur `postgres:16-alpine` (conteneur jetable) : 0 erreur, tous les comportements
-attendus constatés.
+Migrations + smoke test (auth.can, inheritance, RLS, versioning, outbox, tombstone, purge)
+executed on `postgres:16-alpine` (throwaway container): 0 errors, all expected behaviors observed.

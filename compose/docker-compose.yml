@@ -1,5 +1,5 @@
-# FAP-light + FAP-LDP — profil light (1 VM). Orchestré par ./deploy.sh (ne pas lancer à la main).
-# Variables : .env (voir .env.example). DEPLOY_DIR = dossier de déploiement (config/, sql/ custom).
+# FAP-light + FAP-LDP — light profile (1 VM). Orchestrated by ./deploy.sh (do not run by hand).
+# Variables: .env (see .env.example). DEPLOY_DIR = deployment folder (custom config/, sql/).
 services:
   postgres:
     image: postgres:16-alpine
@@ -8,11 +8,11 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${PG_ADMIN_PASSWORD:-postgres}
-      # les mots de passe des rôles applicatifs sont posés par les migrations via ALTER ROLE
-      # (les rôles sont NOLOGIN ; les logins des pools sont créés par le déploiement et rattachés)
+      # application role passwords are set by the migrations via ALTER ROLE
+      # (roles are NOLOGIN; pool logins are created by the deployment and attached)
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./initdb:/docker-entrypoint-initdb.d:ro   # rempli par deploy.sh (ordre: cœur → fap-ldp → custom)
+      - ./initdb:/docker-entrypoint-initdb.d:ro   # filled by deploy.sh (order: core → fap-ldp → custom)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -25,22 +25,22 @@ services:
     env_file: .env
     environment:
       FLOWS: /data/flows/flows.json
-      # connexions PG par rôle (les secrets viennent de .env)
+      # PG connections per role (secrets come from .env)
       PG_GATE_DSN: "postgres://gate:${PG_GATE_PASSWORD}@postgres:5432/fap"
       PG_APP_DSN:  "postgres://app:${PG_APP_PASSWORD}@postgres:5432/fap"
       PG_READER_DSN: "postgres://reader:${PG_READER_PASSWORD}@postgres:5432/fap"
       PG_ADMIN_DSN: "postgres://postgres:${PG_ADMIN_PASSWORD:-postgres}@postgres:5432/fap"
-      # config du nœud fap-ldp lue au boot (modèle métier, extensions, base IRI)
+      # fap-ldp node config read at boot (business model, extensions, base IRI)
       FAP_LDP_CONFIG: /config/model.json
       FAP_LDP_BASE_IRI: "https://${DOMAIN}/"
-      FAP_ORG: "${FAP_ORG:-fap-pod}"                  # claim org des membres internes (contrat-cadre)
-      IDP_ISSUER_URL: "${IDP_EXTERNAL:-false}" # si IdP externe (étape 1)
+      FAP_ORG: "${FAP_ORG:-fap-pod}"                  # org claim of internal members (framework contract)
+      IDP_ISSUER_URL: "${IDP_EXTERNAL:-false}" # if external IdP (step 1)
       IDP_USERINFO_URL: "${IDP_EXTERNAL:+${IDP_ISSUER_URL}/protocol/openid-connect/userinfo}"
       FAP_LDP_VC_TRUST_ANCHORS: "${FAP_LDP_VC_TRUST_ANCHORS:-}"
       FAP_LDP_GOLD_MAX_ROWS: "${FAP_LDP_GOLD_MAX_ROWS:-10000}"
     volumes:
-      - orce-data:/data                              # flows + palette (node-red-contrib-fap-ldp installé au boot)
-      - ${FLOWS_DIR:-./flows}:/data/flows:ro         # flows.json assemblé par deploy.sh (cœur + fap-ldp.json)
+      - orce-data:/data                              # flows + palette (node-red-contrib-fap-ldp installed at boot)
+      - ${FLOWS_DIR:-./flows}:/data/flows:ro         # flows.json assembled by deploy.sh (core + fap-ldp.json)
       - ${DEPLOY_DIR:-./deploy}/config:/config:ro    # model.json, sources.yml, fap-ldp-values.yml
     depends_on:
       postgres: { condition: service_healthy }
@@ -57,7 +57,7 @@ services:
     volumes:
       - ${KEYCLOAK_REALM_FILE:-./keycloak/realm.json}:/opt/keycloak/data/import/realm.json:ro
     command: start --import-realm
-    # exposé uniquement en interne (caddy fait le TLS) ; healthcheck interne
+    # exposed internally only (caddy does the TLS); internal healthcheck
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
       interval: 5s

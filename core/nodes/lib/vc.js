@@ -1,8 +1,8 @@
-// vc.js — vérification cryptographique d'une VC présentée en JWT (header Authorization: Bearer <vc-jwt>).
-// spec fap-ldp v0.3 §7.6 : signature vérifiée, trust anchors = préfixes did:web configurés,
-// did:web du pod + partenaires déclarés. Jamais en query string.
-// did:web : document DID résolu en HTTPS (https://<host>/.well-known/did.json), avec override
-// possible via config (tests/TCk : vcDidDocs = { did: { ...didDoc } }).
+// vc.js — cryptographic verification of a VC presented as a JWT (Authorization: Bearer <vc-jwt> header).
+// spec fap-ldp v0.3 §7.6: signature verified, trust anchors = configured did:web prefixes,
+// the pod's did:web + declared partners. Never in a query string.
+// did:web: DID document resolved over HTTPS (https://<host>/.well-known/did.json), with an
+// override possible via config (tests/TCK: vcDidDocs = { did: { ...didDoc } }).
 const crypto = require('crypto');
 
 function b64urlToBuf(s) {
@@ -34,9 +34,9 @@ async function resolveDidDoc(did, overrides) {
     try {
       const r = await fetch(u);
       if (r.ok) return await r.json();
-    } catch { /* on essaie l'URL suivante */ }
+    } catch { /* try the next URL */ }
   }
-  throw new Error('document DID introuvable pour ' + did);
+  throw new Error('DID document not found for ' + did);
 }
 
 function pickVerificationMethod(didDoc, kid) {
@@ -45,20 +45,20 @@ function pickVerificationMethod(didDoc, kid) {
       || vms.find(m => m.publicKeyJwk);
 }
 
-// Retourne les claims de la VC si valide, null si le token n'est pas une VC,
-// lève une erreur si c'est une VC mais invalide (→ 401).
+// Returns the VC claims if valid, null if the token is not a VC,
+// throws an error if it is a VC but invalid (→ 401).
 async function verifyVc(token, opts) {
   const jwt = decodeJwt(token);
-  if (!jwt || !jwt.payload || !jwt.payload.vc) return null; // pas une VC → la caller tombe sur userinfo/devTokens
+  if (!jwt || !jwt.payload || !jwt.payload.vc) return null; // not a VC → caller falls back to userinfo/devTokens
   const { header, payload, signingInput, signature } = jwt;
   const iss = payload.iss || '';
   const anchors = (opts && opts.trustAnchors) || [];
   if (!anchors.some(a => iss.startsWith(a))) {
-    throw new Error('émetteur VC hors trust anchors: ' + iss);
+    throw new Error('VC issuer outside trust anchors: ' + iss);
   }
   const didDoc = await resolveDidDoc(iss, opts && opts.didDocOverrides);
   const vm = pickVerificationMethod(didDoc, header.kid);
-  if (!vm) throw new Error('pas de clé publique dans le did doc de ' + iss);
+  if (!vm) throw new Error('no public key in the DID doc of ' + iss);
   const key = crypto.createPublicKey({ key: vm.publicKeyJwk, format: 'jwk' });
   let ok;
   if (header.alg === 'ES256') {
@@ -66,9 +66,9 @@ async function verifyVc(token, opts) {
   } else if (header.alg === 'RS256') {
     ok = crypto.verify('sha256', signingInput, key, signature);
   } else {
-    throw new Error('alg non supporté: ' + header.alg);
+    throw new Error('unsupported alg: ' + header.alg);
   }
-  if (!ok) throw new Error('signature VC invalide pour ' + iss);
+  if (!ok) throw new Error('invalid VC signature for ' + iss);
   const sub = (payload.vc.credentialSubject && payload.vc.credentialSubject.id) || iss;
   return { did: sub, webid: sub, vc: payload.vc, iss };
 }

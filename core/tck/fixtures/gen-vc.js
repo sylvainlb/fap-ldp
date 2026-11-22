@@ -1,4 +1,4 @@
-// gen-vc.js — génère une VC JWT signée (ES256) pour le TCK. Usage: node gen-vc.js <key.json> [payloadOverrideJson]
+// gen-vc.js — generates a signed (ES256) VC JWT for the TCK. Usage: node gen-vc.js <key.json> [payloadOverrideJson]
 const crypto = require('crypto'), fs = require('fs');
 const key = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const b64u = b => Buffer.from(JSON.stringify(b)).toString('base64url');

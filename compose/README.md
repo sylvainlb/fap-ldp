@@ -1,59 +1,59 @@
-# Déployer un serveur FAP-LDP (from scratch)
+# Deploying a FAP-LDP server (from scratch)
 
-Ce guide part d'une **machine neuve** et aboutit à un serveur tournant en local (ou en prod),
-avec **votre propre modèle de données**. Le dépôt `fap-ldp` est le *composant* (cloné, inchangé) ;
-votre *déploiement* (config, modèle, secrets) vit dans un dossier à part, jamais commité.
+This guide starts from a **fresh machine** and ends with a running server locally (or in prod),
+with **your own data model**. The `fap-ldp` repository is the *component* (cloned, unchanged);
+your *deployment* (config, model, secrets) lives in a separate folder, never committed.
 
-## Arborescence
+## Directory layout
 
 ```
-~/fap-ldp/              ← composant (git clone, on n'y écrit rien)
-~/fap-light-serveur/    ← cœur FAP (git clone, à côté ; ou facis-fap-iot-ai en fallback)
-~/mon-serveur/          ← VOTRE déploiement (privé, hors dépôt)
-├── .env                ←   config + secrets (DOMAIN, mots de passe PG…)
-├── config/model.json   ←   VOTRE modèle de données
-└── sql/                ←   (optionnel) migrations/vues/seed custom
+~/fap-ldp/              ← component (git clone, nothing written here)
+~/fap-light-serveur/    ← FAP core (git clone, next to it; or facis-fap-iot-ai as fallback)
+~/my-server/            ← YOUR deployment (private, outside the repo)
+├── .env                ←   config + secrets (DOMAIN, PG passwords…)
+├── config/model.json   ←   YOUR data model
+└── sql/                ←   (optional) custom migrations/views/seed
 ```
 
-## 1. Prérequis
+## 1. Prerequisites
 
-- Docker + plugin compose : `sudo apt install -y docker.io docker-compose-plugin`
-- **Local** : rien d'autre (`*.localhost` résout en 127.0.0.1 automatiquement).
-- **Prod** : une VM, ports 80/443 ouverts, un nom de domaine (A record) pointé sur l'IP de la VM.
+- Docker + compose plugin: `sudo apt install -y docker.io docker-compose-plugin`
+- **Local**: nothing else (`*.localhost` resolves to 127.0.0.1 automatically).
+- **Prod**: a VM, ports 80/443 open, a domain name (A record) pointing to the VM's IP.
 
-## 2. Cloner le composant et le cœur
+## 2. Clone the component and the core
 
 ```bash
-git clone <url-fap-ldp> ~/fap-ldp
-git clone <url-cœur-FAP> ~/fap-light-serveur     # à côté de fap-ldp
+git clone <fap-ldp-url> ~/fap-ldp
+git clone <FAP-core-url> ~/fap-light-serveur     # next to fap-ldp
 ```
 
-## 3. Créer votre dossier de déploiement
+## 3. Create your deployment folder
 
 ```bash
-mkdir -p ~/mon-serveur/config
-cp ~/fap-ldp/compose/env.local.example ~/mon-serveur/.env
-# éditer ~/mon-serveur/.env :
+mkdir -p ~/my-server/config
+cp ~/fap-ldp/compose/env.local.example ~/my-server/.env
+# edit ~/my-server/.env :
 #   local : DOMAIN=app.localhost
-#   prod  : DOMAIN=serveur.example.fr   (A record → IP de la VM)
-# les secrets *_PASSWORD=CHANGE_ME sont auto-générés au premier deploy
+#   prod  : DOMAIN=server.example.com   (A record → VM IP)
+# *_PASSWORD=CHANGE_ME secrets are auto-generated on first deploy
 ```
 
-## 4. Écrire votre modèle de données
+## 4. Write your data model
 
-`~/mon-serveur/config/model.json` — seul fichier "métier" à écrire (exemple complet :
-`../examples/supervision/model.json`) :
+`~/my-server/config/model.json` — the only "business" file to write (full example:
+`../examples/supervision/model.json`):
 
 ```json
 {
   "base_iri": "https://app.localhost/",
   "tables": {
-    "produits": {
+    "products": {
       "pk": "id", "owner": "created_by", "published": true, "tombstone": "deleted_at",
       "fields": {
         "id": "bigserial",
-        "nom": "text not null",
-        "prix": "numeric",
+        "name": "text not null",
+        "price": "numeric",
         "created_by": "bigint fk users(id)",
         "created_at": "timestamptz", "updated_at": "timestamptz", "deleted_at": "timestamptz"
       }
@@ -62,46 +62,46 @@ cp ~/fap-ldp/compose/env.local.example ~/mon-serveur/.env
 }
 ```
 
-Par table, au boot le nœud `fap-ldp` génère automatiquement : la table `app.<table>` + index +
+Per table, at boot the `fap-ldp` node automatically generates: the `app.<table>` table + index +
 triggers (`updated_at`, versioning, tombstone, outbox), `FORCE ROW LEVEL SECURITY` + policies via
-`auth.can()`, le mapping `dsp.asset_mapping` (conteneur `/<table>/`, publié si `published: true`),
-l'ACL initiale (le `owner` a `control`). SQL custom (vues, seed) → `~/mon-serveur/sql/*.sql`.
+`auth.can()`, the `dsp.asset_mapping` mapping (container `/<table>/`, published if `published: true`),
+the initial ACL (the `owner` gets `control`). Custom SQL (views, seed) → `~/my-server/sql/*.sql`.
 
-## 5. Lancer
+## 5. Launch
 
 ```bash
 cd ~/fap-ldp/compose
-make deploy DEPLOY_DIR=~/mon-serveur ENV_FILE=~/mon-serveur/.env
+make deploy DEPLOY_DIR=~/my-server ENV_FILE=~/my-server/.env
 ```
 
-`deploy.sh` (idempotent) : check prérequis/DNS → secrets → migrations ordonnées (cœur → socle
-fap-ldp → votre `sql/`) → postgres (healthy) → ORCE (boot applique `model.json`) → keycloak (realm
-embarqué, DPoP) → caddy (TLS auto) → vérif HTTPS → backup initial.
+`deploy.sh` (idempotent): prerequisite/DNS check → secrets → ordered migrations (core → fap-ldp
+base → your `sql/`) → postgres (healthy) → ORCE (boot applies `model.json`) → keycloak (embedded
+realm, DPoP) → caddy (auto TLS) → HTTPS check → initial backup.
 
-## 6. Vérifier et utiliser
+## 6. Verify and use
 
 ```bash
-make test    DEPLOY_DIR=~/mon-serveur ENV_FILE=~/mon-serveur/.env   # healthcheck + tck (CA-S/CA-L)
-curl -k https://app.localhost/produits/      # conteneur LDP de votre modèle
-# LDP applicatif : https://$DOMAIN/     ·   data plane cœur : https://$DOMAIN/dsp/
+make test    DEPLOY_DIR=~/my-server ENV_FILE=~/my-server/.env   # healthcheck + tck (AC-S/AC-L)
+curl -k https://app.localhost/products/      # LDP container of your model
+# application LDP: https://$DOMAIN/     ·   core data plane: https://$DOMAIN/dsp/
 ```
 
-## Commandes usuelles (depuis `fap-ldp/compose`)
+## Common commands (from `fap-ldp/compose`)
 
-| Commande | Effet |
+| Command | Effect |
 |---|---|
-| `make deploy [DEPLOY_DIR=… ENV_FILE=…]` | déploie / met à jour (idempotent) |
+| `make deploy [DEPLOY_DIR=… ENV_FILE=…]` | deploys / updates (idempotent) |
 | `make test …` | healthcheck + tck |
-| `make backup …` | pg_dump + WAL maintenant |
-| `make status …` | état des services + rôles PG |
-| `make logs` / `make down` | logs / arrêt (volumes conservés) |
-| `make update` | git pull du composant + redeploy |
+| `make backup …` | pg_dump + WAL now |
+| `make status …` | service status + PG roles |
+| `make logs` / `make down` | logs / stop (volumes kept) |
+| `make update` | git pull of the component + redeploy |
 
-Par défaut (sans variables) : déploiement dans `compose/deploy` + `compose/.env` (gitignorés).
+By default (no variables): deployment in `compose/deploy` + `compose/.env` (gitignored).
 
-## Dépannage rapide
+## Quick troubleshooting
 
-- `DNS: … ne pointe pas sur …` → vérifier le A record (prod) ou `/etc/hosts` (`127.0.0.1 app.localhost`).
-- `https://… ne répond pas` → `make logs` ; vérifier que caddy a obtenu le certificat (ports 80/443).
-- `make deploy` relancé = sûr : migrations idempotentes (`CREATE … IF NOT EXISTS`), secrets persistés dans `.env`.
-- Changer de modèle : éditer `DEPLOY_DIR/config/model.json` puis `make deploy` (rejoué au boot).
+- `DNS: … does not point to …` → check the A record (prod) or `/etc/hosts` (`127.0.0.1 app.localhost`).
+- `https://… does not respond` → `make logs`; check that caddy obtained the certificate (ports 80/443).
+- `make deploy` re-run = safe: idempotent migrations (`CREATE … IF NOT EXISTS`), secrets persisted in `.env`.
+- Changing model: edit `DEPLOY_DIR/config/model.json` then `make deploy` (replayed at boot).

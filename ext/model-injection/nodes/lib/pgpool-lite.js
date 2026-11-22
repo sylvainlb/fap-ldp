@@ -1,5 +1,5 @@
-// pgpool-lite.js — ext/model-injection : pool PG minimal (l'ext est un package autonome,
-// elle ne dépend pas des libs internes du core). Rôle admin : boot + endpoint admin (DDL).
+// pgpool-lite.js — ext/model-injection: minimal PG pool (the ext is a standalone package,
+// it does not depend on the core's internal libs). Admin role: boot + admin endpoint (DDL).
 const { Pool } = require('pg');
 
 function createPool(config) {

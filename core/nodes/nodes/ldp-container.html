@@ -29,33 +29,33 @@ RED.nodes.registerType('fap-ldp-container', {
 });
 </script>
 <script type="text/html" data-template-name="fap-ldp-container">
-  <div class="form-row"><label>Nom</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label>Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label>Base IRI</label><input type="text" id="node-input-baseIri"></div>
-  <div class="form-row"><label>Org interne (claim org)</label><input type="text" id="node-input-podOrg"></div>
-  <div class="form-row"><label>Catalogue DSP (Link rel="catalog")</label><input type="text" id="node-input-catalogPath"></div>
-  <div class="form-row"><label>model.json (règles métier K, vide = ${FAP_LDP_CONFIG})</label><input type="text" id="node-input-modelPath"></div>
-  <div class="form-row"><label>Nœud PDP</label><input type="text" id="node-input-pdp"></div>
+  <div class="form-row"><label>Internal org (org claim)</label><input type="text" id="node-input-podOrg"></div>
+  <div class="form-row"><label>DSP catalog (Link rel="catalog")</label><input type="text" id="node-input-catalogPath"></div>
+  <div class="form-row"><label>model.json (business rules K, empty = ${FAP_LDP_CONFIG})</label><input type="text" id="node-input-modelPath"></div>
+  <div class="form-row"><label>PDP node</label><input type="text" id="node-input-pdp"></div>
   <div class="form-row"><label>IdP userinfo URL (OIDC)</label><input type="text" id="node-input-idpUserinfoUrl"></div>
   <div class="form-row"><label>devTokens (JSON, test/TCK)</label><input type="text" id="node-input-devTokens"></div>
-  <div class="form-row"><label>VC trust anchors (JSON, préfixes did:web)</label><input type="text" id="node-input-vcTrustAnchors"></div>
+  <div class="form-row"><label>VC trust anchors (JSON, did:web prefixes)</label><input type="text" id="node-input-vcTrustAnchors"></div>
   <div class="form-row"><label>VC didDocs override (JSON, test)</label><input type="text" id="node-input-vcDidDocs"></div>
   <hr>
   <div class="form-row"><label>PG host</label><input type="text" id="node-input-pgHost"></div>
   <div class="form-row"><label>PG port</label><input type="text" id="node-input-pgPort"></div>
-  <div class="form-row"><label>PG base</label><input type="text" id="node-input-pgDatabase"></div>
-  <div class="form-row"><label>PG user (rôle app, écritures app.*)</label><input type="text" id="node-input-pgUser"></div>
+  <div class="form-row"><label>PG database</label><input type="text" id="node-input-pgDatabase"></div>
+  <div class="form-row"><label>PG user (app role, app.* writes)</label><input type="text" id="node-input-pgUser"></div>
   <div class="form-row"><label>PG password</label><input type="password" id="node-input-pgPassword"></div>
   <div class="form-row"><label>Pool max</label><input type="text" id="node-input-pgPoolMax"></div>
-  <div class="form-row"><label>PG reader user (lectures gold, optionnel)</label><input type="text" id="node-input-pgReaderUser"></div>
+  <div class="form-row"><label>PG reader user (gold reads, optional)</label><input type="text" id="node-input-pgReaderUser"></div>
   <div class="form-row"><label>PG reader password</label><input type="password" id="node-input-pgReaderPassword"></div>
-  <div class="form-row"><label>Gold max rows (garde §6.7)</label><input type="text" id="node-input-goldMaxRows"></div>
+  <div class="form-row"><label>Gold max rows (guard §6.7)</label><input type="text" id="node-input-goldMaxRows"></div>
 </script>
 <script type="text/html" data-help-name="fap-ldp-container">
-  <p>Nœud conteneur LDP (PEP) FAP-LDP — spec fap-ldp v0.2 §6. Endpoint LDP/JSON-LD servi par ORCE
-  (derrière caddy en 443) : GET/POST/PUT/DELETE/PATCH sur ressources et BasicContainers,
+  <p>FAP-LDP LDP container node (PEP) — spec fap-ldp v0.2 §6. LDP/JSON-LD endpoint served by ORCE
+  (behind caddy on 443): GET/POST/PUT/DELETE/PATCH on resources and BasicContainers,
   <code>GET/PUT &lt;res&gt;.acl</code> (WebACL ⇄ <code>auth.acl</code>), ETag + If-Match/If-None-Match
-  (304/412), PATCH = JSON Merge Patch (RFC 7386), erreurs JSON-LD <code>dspace:Error</code>.</p>
-  <p>Chemins hors LDP (<code>/dsp/*</code>, <code>/red*</code>, <code>/editor*</code>) sont laissés
-  au cœur FAP. Mapping conteneur↔table via <code>dsp.asset_mapping</code> ; contrôle d'accès délégué
-  au nœud PDP (contrat DSP + ACL, RLS en PG).</p>
+  (304/412), PATCH = JSON Merge Patch (RFC 7386), JSON-LD errors <code>dspace:Error</code>.</p>
+  <p>Non-LDP paths (<code>/dsp/*</code>, <code>/red*</code>, <code>/editor*</code>) are left
+  to the FAP core. Container↔table mapping via <code>dsp.asset_mapping</code>; access control delegated
+  to the PDP node (DSP contract + ACL, RLS in PG).</p>
 </script>

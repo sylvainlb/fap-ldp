@@ -1,11 +1,11 @@
--- 005_rls.sql — RLS sur app.* (spec fap-ldp v0.2 §7.2)
--- Le PEP fait, dans la transaction : SET LOCAL app.webid / app.role / app.base_iri
--- depuis les claims du token (jamais depuis la query string).
--- FORCE ROW LEVEL SECURITY : même le owner des tables est filtré.
--- IRI de ressource construite depuis app.base_iri (base IRI du pod, ex. 'https://pod/',
--- slash final toléré : rtrim) :
+-- 005_rls.sql — RLS on app.* (spec fap-ldp v0.2 §7.2)
+-- The PEP sets, inside the transaction: SET LOCAL app.webid / app.role / app.base_iri
+-- from the token claims (never from the query string).
+-- FORCE ROW LEVEL SECURITY: even the table owner is filtered.
+-- Resource IRI built from app.base_iri (pod base IRI, e.g. 'https://pod/',
+-- trailing slash tolerated: rtrim):
 --   /tickets/<id>, /tickets/<id>/comments/<id>, /users/<id>, /buildings/<id>
--- claim absent → auth.can = false → deny silencieux (rien n'est servi).
+-- missing claim → auth.can = false → silent deny (nothing is served).
 
 ALTER TABLE app.users     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.buildings ENABLE ROW LEVEL SECURITY;
@@ -16,11 +16,11 @@ ALTER TABLE app.buildings FORCE ROW LEVEL SECURITY;
 ALTER TABLE app.tickets   FORCE ROW LEVEL SECURITY;
 ALTER TABLE app.comments  FORCE ROW LEVEL SECURITY;
 
--- tickets : read sur la ressource, write sur le conteneur (INSERT) puis la ressource (UPDATE/DELETE)
--- RLS = autorisation pure (auth.can). Le filtrage des tombstones (deleted_at IS NULL) est fait
--- par le PEP dans ses requêtes, PAS ici : sur un UPDATE, PostgreSQL exige que la nouvelle ligne
--- satisfasse aussi le USING des policies SELECT, donc un filtre deleted_at ici bloquerait le
--- soft delete (UPDATE deleted_at = now()).
+-- tickets: read on the resource, write on the container (INSERT) then the resource (UPDATE/DELETE)
+-- RLS = pure authorization (auth.can). Tombstone filtering (deleted_at IS NULL) is done
+-- by the PEP in its queries, NOT here: on UPDATE, PostgreSQL requires the new row
+-- to also satisfy the USING of the SELECT policies, so a deleted_at filter here would block
+-- the soft delete (UPDATE deleted_at = now()).
 DROP POLICY IF EXISTS tickets_read ON app.tickets;
 CREATE POLICY tickets_read ON app.tickets FOR SELECT
   USING (auth.can(rtrim(current_setting('app.base_iri', true), '/') || '/tickets/' || id::text, 'read'));
@@ -52,7 +52,7 @@ CREATE POLICY buildings_write ON app.buildings FOR ALL
   USING (auth.can(rtrim(current_setting('app.base_iri', true), '/') || '/buildings/' || id::text, 'write'))
   WITH CHECK (auth.can(rtrim(current_setting('app.base_iri', true), '/') || '/buildings/' || id::text, 'write'));
 
--- comments : IRI imbriquée /tickets/<tid>/comments/<cid>
+-- comments: nested IRI /tickets/<tid>/comments/<cid>
 DROP POLICY IF EXISTS comments_read ON app.comments;
 CREATE POLICY comments_read ON app.comments FOR SELECT
   USING (auth.can(rtrim(current_setting('app.base_iri', true), '/') || '/tickets/' || ticket_id::text

@@ -1,10 +1,10 @@
-// model.js — nœud fap-ldp-model : applique le modèle métier du déploiement au boot.
-// Lit config/model.json (ex. examples/supervision/model.json) et, de façon idempotente :
-//   1. crée les tables app.<table> + triggers (updated_at, versioning, tombstone, outbox) ;
-//   2. pose FORCE ROW LEVEL SECURITY + policies read/write via auth.can() ;
-//   3. enregistre le mapping conteneur dans dsp.asset_mapping (publié si published: true) ;
-// Le cœur (core/sql) reste générique : aucun modèle métier en dur.
-// Connexion : rôle admin (boot = migration), PAS le rôle runtime app/reader.
+// model.js — fap-ldp-model node: applies the deployment's business model at boot.
+// Reads config/model.json (e.g. examples/supervision/model.json) and, idempotently:
+//   1. creates the app.<table> tables + triggers (updated_at, versioning, tombstone, outbox);
+//   2. sets FORCE ROW LEVEL SECURITY + read/write policies via auth.can();
+//   3. records the container mapping in dsp.asset_mapping (published if published: true);
+// The core (core/sql) stays generic: no hard-coded business model.
+// Connection: admin role (boot = migration), NOT the runtime app/reader role.
 const fs = require('fs');
 const { createPool } = require('../lib/pgpool');
 
@@ -14,7 +14,7 @@ module.exports = function (RED) {
     const node = this;
     node.name = config.name;
     node.modelPath = config.modelPath || '/data/config/model.json';
-    node.pool = createPool(config); // rôle admin en boot
+    node.pool = createPool(config); // admin role at boot
 
     node.on('close', async () => { await node.pool.end().catch(() => {}); });
 
@@ -23,7 +23,7 @@ module.exports = function (RED) {
     async function applyModel() {
       const model = JSON.parse(fs.readFileSync(node.modelPath, 'utf8'));
       const baseIri = (model.base_iri || 'http://localhost:1880/').replace(/\/?$/, '/');
-      // Les tables créées au boot appartiennent au rôle admin (boot) : déléguer au rôle runtime app
+      // Tables created at boot belong to the admin role (boot): delegate to the runtime app role
       await node.pool.query(`
         ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app;
         ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT USAGE, SELECT ON SEQUENCES TO app;`);
@@ -33,19 +33,19 @@ module.exports = function (RED) {
         await createRls(table, spec, baseIri, model);
         await registerMapping(table, spec, baseIri, model);
       }
-      node.log('fap-ldp: model applied: ' + Object.keys(model.tables || {}).join(', ')); // marqueur grepvé par compose/deploy.sh
+      node.log('fap-ldp: model applied: ' + Object.keys(model.tables || {}).join(', ')); // marker grepped by compose/deploy.sh
     }
 
-    // "bigint fk buildings(id)" → "bigint REFERENCES buildings(id)" ;
-    // "text check in ('a','b')" → "text CHECK (<name> IN ('a','b'))" ;
-    // "text (commentaire)" → "text" ; le reste passe tel quel.
+    // "bigint fk buildings(id)" → "bigint REFERENCES buildings(id)";
+    // "text check in ('a','b')" → "text CHECK (<name> IN ('a','b'))";
+    // "text (comment)" → "text"; anything else passes through as-is.
     function fieldToSql(name, def) {
       let d = def.trim();
       const chk = d.match(/^(.*?)\bcheck\s+in\s*(\(.*\))$/i);
       if (chk) return `${chk[1].trim()} CHECK (${name} IN ${chk[2]})`;
       const fk = d.match(/^(\S+)\s+\bfk\s+(\w+)\((\w+)\)$/i);
       if (fk) return `${fk[1]} REFERENCES app.${fk[2]}(${fk[3]})`;
-      d = d.replace(/ \([^)]*\)\s*$/, ''); // commentaire final (espace avant la parenthèse) ; now() conservé
+      d = d.replace(/ \([^)]*\)\s*$/, ''); // trailing comment (space before the parenthesis); now() kept
       return d;
     }
 
@@ -82,8 +82,8 @@ module.exports = function (RED) {
     }
 
     function iriExpr(table, spec, model) {
-      // nesting EXPLICITE : spec.parent + spec.parent_fk (ex. comments: parent=tickets, parent_fk=ticket_id)
-      // → IRI imbriquée /<parent>/<parent_fk>/<table>/<pk> ; sinon conteneur plat /<table>/
+      // EXPLICIT nesting: spec.parent + spec.parent_fk (e.g. comments: parent=tickets, parent_fk=ticket_id)
+      // → nested IRI /<parent>/<parent_fk>/<table>/<pk>; otherwise flat container /<table>/
       if (spec.parent && spec.parent_fk) {
         const parent = spec.parent, fkField = spec.parent_fk;
         return {

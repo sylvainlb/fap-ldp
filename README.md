@@ -1,58 +1,58 @@
-# FAP-LDP — Extension LDP du serveur FAP (étape 2, périmètre E1+E2+E3)
+# FAP-LDP — LDP extension of the FAP server (step 2, scope E1+E2+E3)
 
-Dépôt du composant **FAP-LDP** : extension indépendante du cœur FAP (FAP-light ou FAP-full) apportant
-le domaine applicatif `app.*` transactionnel, un endpoint LDP/JSON-LD unique (conteneurs gold + `app.*`)
- dans le même runtime ORCE (package `node-red-contrib-fap-ldp`), et le contrôle d'accès unifié
-(contrat DSP + ACL par ressource, PDP partagé avec le data plane DSP).
+Repository of the **FAP-LDP** component: an extension independent of the FAP core (FAP-light or FAP-full) providing
+the transactional `app.*` application domain, a single LDP/JSON-LD endpoint (gold containers + `app.*`)
+ in the same ORCE runtime (package `node-red-contrib-fap-ldp`), and unified access control
+(DSP contract + per-resource ACL, PDP shared with the DSP data plane).
 
-- **Spécification** : `../spec/fap-ldp-spec.md` (version 0.2 — décisions A–E intégrées)
-- **Cœur FAP** : dépôt `../fap-light-serveur/` (spec `../spec/fap-light-spec-serveur.md` v0.2, décisions D-1..D-6)
-- **Coutures cœur** : cible `fap-core-contracts: v1.0` (à créer côté cœur, `contracts/` du dépôt fap-light-serveur)
-- **Références** : synthèse d'architecture FAP (`../spec/facis-fap-architecture-synthese.md`, §3, §4.1, §4.5),
-  profils (`../spec/fap-domaine-app-et-profils.md`), cas d'usage
+- **Specification**: `../spec/fap-ldp-spec.md` (version 0.2 — decisions A–E integrated)
+- **FAP core**: repository `../fap-light-serveur/` (spec `../spec/fap-light-spec-serveur.md` v0.2, decisions D-1..D-6)
+- **Core seams**: target `fap-core-contracts: v1.0` (to be created on the core side, `contracts/` of the fap-light-serveur repo)
+- **References**: FAP architecture synthesis (`../spec/facis-fap-architecture-synthese.md`, §3, §4.1, §4.5),
+  profiles (`../spec/fap-domaine-app-et-profils.md`), use cases
   (`../spec/supervision-energetique-spec-fonctionnelle.md`)
 
-Le FAP-LDP **ne modifie pas** le cœur FAP : il dépend des coutures stables versionnées, déclarées dans
-`contracts/` (enveloppe de message, contrat de ligne bronze, transformations SQL sur schémas nommés
-`bronze`/`silver`/`gold`/`app`, `trino-read-api v1`, `dsp-control-plane-api v1`, protocoles DSP/LDP).
+FAP-LDP **does not modify** the FAP core: it depends on stable versioned seams, declared in
+`contracts/` (message envelope, bronze row contract, SQL transformations on named schemas
+`bronze`/`silver`/`gold`/`app`, `trino-read-api v1`, `dsp-control-plane-api v1`, DSP/LDP protocols).
 
-## Contenu du dépôt (layout monorepo léger, spec §4)
+## Repository contents (light monorepo layout, spec §4)
 
 ```
 fap-ldp/
-├── README.md                  ← ce fichier
-├── core/                      ← E1+E2+E3 — requis, API/hooks stables, rétrocompatibles
-│   ├── nodes/                 ← package node-red-contrib-fap-ldp (nœud conteneur LDP/PEP, nœud PDP)
-│   ├── sql/                   ← socle générique UNIQUEMENT : rôles, auth.acl/auth.can, dsp.*, app.versions/tombstones/outbox, maintenance (pas de modèle métier)
-│   └── tck/                   ← conformité W3C LDP (app-tests) + tests PDP/ACL
-├── examples/                  ← modèles métier d'exemple (ex. supervision/ : model.json + SQL), appliqués au boot par le nœud
-├── ext/                       ← extensions optionnelles, chacune = package installable seul
-│   ├── semantics/  (E4)       ←   chaque ext : propre package/nœuds, propre tck/, propre README
-│   ├── shacl/      (E5)       ←   branchée sur les hooks stables du core, activée par config
+├── README.md                  ← this file
+├── core/                      ← E1+E2+E3 — required, stable API/hooks, backwards compatible
+│   ├── nodes/                 ← package node-red-contrib-fap-ldp (LDP container/PEP node, PDP node)
+│   ├── sql/                   ← generic base ONLY: roles, auth.acl/auth.can, dsp.*, app.versions/tombstones/outbox, maintenance (no business model)
+│   └── tck/                   ← W3C LDP conformance (app-tests) + PDP/ACL tests
+├── examples/                  ← example business models (e.g. supervision/: model.json + SQL), applied at boot by the node
+├── ext/                       ← optional extensions, each = standalone installable package
+│   ├── semantics/  (E4)       ←   each ext: own package/nodes, own tck/, own README
+│   ├── shacl/      (E5)       ←   plugged onto the core's stable hooks, enabled by config
 │   ├── index/      (E6)
 │   ├── push/       (E7)
 │   ├── federation/ (E8)
 │   ├── store-rdf/  (E10)
-│   ├── model-injection/ (E11) ←   injection gouvernée de modèles par package (backend app store), v0.1
-│   └── hot-reload/ (E12)      ←   application à chaud des modèles (v2 de E11)
-├── contracts/                 ← dépendance versionnée : fap-core-contracts v1.0
-├── compose/                   ← install FAP-light (1 VM) : ORCE + package fap-ldp + PG + caddy + Keycloak embarqué
-│                              │   → guide pas à pas (from scratch, local/prod) : compose/README.md
-├── charts/fap-ldp/            ← install FAP-medium/full (K8s) : même endpoint public (443, routing / → LDP, /dsp/* → cœur)
-└── tck/                       ← matrice de compatibilité core × ext + tests d'intégration
+│   ├── model-injection/ (E11) ←   governed model injection by package (app store backend), v0.1
+│   └── hot-reload/ (E12)      ←   hot application of models (v2 of E11)
+├── contracts/                 ← versioned dependency: fap-core-contracts v1.0
+├── compose/                   ← install FAP-light (1 VM): ORCE + fap-ldp package + PG + caddy + embedded Keycloak
+│                              │   → step-by-step guide (from scratch, local/prod): compose/README.md
+├── charts/fap-ldp/            ← install FAP-medium/full (K8s): same public endpoint (443, routing / → LDP, /dsp/* → core)
+└── tck/                       ← core × ext compatibility matrix + integration tests
 ```
 
-## Critères d'acceptation couverts (spec §11)
+## Covered acceptance criteria (spec §11)
 
-| CA | Énoncé (résumé) |
-|----|-----------------|
-| CA-L1 | `POST /tickets` → read-after-write immédiat ; PUT/PATCH = nouvelle version ; DELETE = tombstone |
-| CA-L2 | Asset gold publié = conteneur LDP (`app:contains`), ressources = lignes, contrat DSP sur l'asset |
-| CA-L3 | Membre interne (contrat-cadre auto) lit si ACL autorise ; sinon 403 |
-| CA-L4 | Externe avec contrat mais sans ACL → 403 ; avec DID dans l'ACL → allow + audit `agreement_id` |
-| CA-L5 | Contrainte ODRL `facis:resourceId isAnyOf [...]` → filtrage des ressources servies |
-| CA-L6 | `GET/PUT <res>.acl` round-trip WebACL ⇄ `auth.acl`, effectif immédiatement (purge cache) |
-| CA-L7 | Conteneur non publié → invisible/403 pour les externes |
-| CA-L8 | Sous-ensemble app-tests (W3C) listé dans `tck/` passé |
-| CA-L9 | Révocation contrat/ACL → accès coupé < 1 s (purge cache active) |
-| CA-L10 | PATCH Merge Patch = modification partielle + version ; `If-Match` obsolète → 412 |
+| AC | Statement (summary) |
+|----|---------------------|
+| AC-L1 | `POST /tickets` → immediate read-after-write; PUT/PATCH = new version; DELETE = tombstone |
+| AC-L2 | Published gold asset = LDP container (`app:contains`), resources = rows, DSP contract on the asset |
+| AC-L3 | Internal member (auto framework contract) reads if ACL allows; otherwise 403 |
+| AC-L4 | External with contract but without ACL → 403; with DID in the ACL → allow + audit `agreement_id` |
+| AC-L5 | ODRL constraint `facis:resourceId isAnyOf [...]` → filtering of served resources |
+| AC-L6 | `GET/PUT <res>.acl` WebACL round-trip ⇄ `auth.acl`, effective immediately (cache purge) |
+| AC-L7 | Unpublished container → invisible/403 for externals |
+| AC-L8 | app-tests (W3C) subset listed in `tck/` passing |
+| AC-L9 | Contract/ACL revocation → access cut < 1 s (active cache purge) |
+| AC-L10 | PATCH Merge Patch = partial modification + version; stale `If-Match` → 412 |

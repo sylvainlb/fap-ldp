@@ -1,5 +1,5 @@
-// jsonld.js — sérialisation JSON-LD v1 (spec fap-ldp v0.2 §6.2, sans E4)
-// Contexte minimal embarqué, préfixe par table, @vocab = IRI du conteneur, colonnes telles quelles.
+// jsonld.js — JSON-LD v1 serialization (spec fap-ldp v0.2 §6.2, without E4)
+// Minimal embedded context, per-table prefix, @vocab = container IRI, columns as-is.
 
 const LDP = 'http://www.w3.org/ns/ldp#';
 
@@ -17,7 +17,7 @@ function contextFor(baseIri, containerUri, schema, table) {
 
 function camel(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
-// ligne PG (objet colonne→valeur) → document ressource LDP/JSON-LD
+// PG row (column→value object) → LDP/JSON-LD resource document
 function resourceDoc(baseIri, containerUri, schema, table, row, pkCol) {
   const prefix = tablePrefix(schema, table);
   const doc = {
@@ -31,7 +31,7 @@ function resourceDoc(baseIri, containerUri, schema, table, row, pkCol) {
   return doc;
 }
 
-// conteneur BasicContainer
+// BasicContainer container
 function containerDoc(baseIri, containerUri, memberIris, opts) {
   const doc = {
     '@context': contextFor(baseIri, containerUri, null, null),
@@ -42,7 +42,7 @@ function containerDoc(baseIri, containerUri, memberIris, opts) {
   return doc;
 }
 
-// erreur JSON-LD dspace:Error (même format que le data plane cœur)
+// JSON-LD dspace:Error error (same format as the core data plane)
 function errorDoc(code, message) {
   return {
     '@context': { dspace: 'https://www.w3.org/ns/dspace#' },
@@ -52,7 +52,7 @@ function errorDoc(code, message) {
   };
 }
 
-// document entrant (POST/PUT/PATCH) → objet colonne→valeur (préfixes retirés)
+// incoming document (POST/PUT/PATCH) → column→value object (prefixes stripped)
 function docToRow(doc, schema, table) {
   const prefix = tablePrefix(schema, table) + ':';
   const row = {};

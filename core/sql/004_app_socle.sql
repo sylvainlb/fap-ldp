@@ -1,22 +1,22 @@
--- 004_app_socle.sql — Socle générique du domaine app.* (spec fap-ldp v0.2 §5.2/§5.3)
--- Ce fichier ne contient AUCUN modèle métier : les tables app.<table> sont créées au boot
--- par le nœud fap-ldp à partir de config/model.json du déploiement (exemple : examples/supervision/).
--- Ici uniquement les tables et fonctions génériques, valables pour tout modèle.
+-- 004_app_socle.sql — Generic base of the app.* domain (spec fap-ldp v0.2 §5.2/§5.3)
+-- This file contains NO business model: the app.<table> tables are created at boot
+-- by the fap-ldp node from the deployment's config/model.json (example: examples/supervision/).
+-- Here only the generic tables and functions, valid for any model.
 
--- Historique des versions (PUT/PATCH = nouvelle version)
+-- Version history (PUT/PATCH = new version)
 CREATE TABLE IF NOT EXISTS app.versions (
   id bigserial PRIMARY KEY,
   table_name text NOT NULL,
   row_id bigint NOT NULL,
   version integer NOT NULL,
   data jsonb NOT NULL,
-  changed_by text,                               -- webid depuis app.webid
+  changed_by text,                               -- webid from app.webid
   changed_at timestamptz DEFAULT now(),
   UNIQUE (table_name, row_id, version)
 );
 CREATE INDEX IF NOT EXISTS versions_table_row_idx ON app.versions (table_name, row_id);
 
--- Tombstones (DELETE LDP = soft delete, purge physique en 006_maintenance.sql, rétention 30 j)
+-- Tombstones (LDP DELETE = soft delete, physical purge in 006_maintenance.sql, 30-day retention)
 CREATE TABLE IF NOT EXISTS app.tombstones (
   table_name text NOT NULL,
   row_id bigint NOT NULL,
@@ -25,20 +25,20 @@ CREATE TABLE IF NOT EXISTS app.tombstones (
   PRIMARY KEY (table_name, row_id)
 );
 
--- Outbox : retour vers la FAP par événement d'ingestion (RG-3, §5.3).
--- Un flow ORCE consomme pg_notify('fap_ingest') et lit app.outbox → INSERT bronze via la gate.
+-- Outbox: feedback to the FAP via ingestion event (RG-3, §5.3).
+-- An ORCE flow consumes pg_notify('fap_ingest') and reads app.outbox → INSERT bronze via the gate.
 CREATE TABLE IF NOT EXISTS app.outbox (
   id bigserial PRIMARY KEY,
-  event_type text NOT NULL,                      -- ex. 'tickets.INSERT'
+  event_type text NOT NULL,                      -- e.g. 'tickets.INSERT'
   payload jsonb NOT NULL,
   created_at timestamptz DEFAULT now(),
   processed_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS outbox_pending_idx ON app.outbox (id) WHERE processed_at IS NULL;
 
--- Fonctions trigger génériques. Le nœud fap-ldp pose les triggers sur chaque table app.<table>
--- déclarée dans model.json (set_updated_at / versioning / tombstone / outbox).
--- INSERT : renseigne updated_at si absent (défaut) ; UPDATE : systématique
+-- Generic trigger functions. The fap-ldp node sets the triggers on each app.<table>
+-- declared in model.json (set_updated_at / versioning / tombstone / outbox).
+-- INSERT: fills updated_at if absent (default); UPDATE: always
 CREATE OR REPLACE FUNCTION app.set_updated_at() RETURNS trigger AS $$
 BEGIN
   IF TG_OP = 'INSERT' AND NEW.updated_at IS NULL THEN
@@ -79,7 +79,7 @@ BEGIN
   RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
--- Droits rôle app (le nœud LDP/PEP écrit app.* avec ce rôle — nom commun cœur/extension, spec §7.5)
+-- app role rights (the LDP/PEP node writes app.* with this role — name shared core/extension, spec §7.5)
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA app TO app;
 GRANT EXECUTE ON FUNCTION app.set_updated_at(), app.version_trigger(), app.tombstone_trigger(), app.outbox_trigger() TO app;

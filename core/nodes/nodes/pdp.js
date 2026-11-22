@@ -1,8 +1,8 @@
-// pdp.js — nœud PDP (Policy Decision Point), spec fap-ldp v0.2 §7.1
-// Pipeline uniforme : étape 1 contrat/capacité DSP (cache TTL PT1H, purge sur pg_notify
-// 'fap_revoked') → étape 2 ACL (auth.can via PG, contexte de session posé) → étape 3
-// obligations ODRL (facis:resourceId isAnyOf...) + audit dsp.audit.
-// Le nœud est appelé par le nœud conteneur LDP (config.pdp) : pdpNode.decide({...}).
+// pdp.js — PDP node (Policy Decision Point), spec fap-ldp v0.2 §7.1
+// Uniform pipeline: step 1 DSP contract/capacity (TTL PT1H cache, purge on pg_notify
+// 'fap_revoked') → step 2 ACL (auth.can via PG, session context set) → step 3
+// ODRL obligations (facis:resourceId isAnyOf...) + dsp.audit audit.
+// The node is called by the LDP container node (config.pdp): pdpNode.decide({...}).
 const crypto = require('crypto');
 const { createPool } = require('../lib/pgpool');
 
@@ -17,7 +17,7 @@ module.exports = function (RED) {
     node.pool = createPool(config);
     node.cache = new Map(); // key: tokenHash|resource|mode → {decision, expiresAt}
 
-    // Révocation (contrat ou ACL) : pg_notify('fap_revoked') → purge immédiate du cache (CA-L9)
+    // Revocation (contract or ACL): pg_notify('fap_revoked') → immediate cache purge (AC-L9)
     (async () => {
       try {
         const c = await node.pool.connect();
@@ -32,8 +32,8 @@ module.exports = function (RED) {
     })();
   }
 
-  // claims: {webid, role, org, did} ; resourceUri IRI complet ; containerPath ex. '/tickets/'
-  // mode: read|write|append|control ; published: booléen du mapping
+  // claims: {webid, role, org, did}; resourceUri full IRI; containerPath e.g. '/tickets/'
+  // mode: read|write|append|control; published: boolean from the mapping
   // → {allow, status, agreementId, obligations, reason}
   PdpNode.prototype.decide = async function ({ token, claims, resourceUri, containerPath, mode, published }) {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -50,10 +50,10 @@ module.exports = function (RED) {
     const deny = (reason) => ({ allow: false, status: 403, reason });
     const isInternal = !!(claims.org && claims.org === this.podOrg);
 
-    // --- étape 0 : conteneur non publié → invisible pour les externes (CA-L7)
+    // --- step 0: unpublished container → invisible to externals (AC-L7)
     if (!published && !isInternal) return deny('container-not-published');
 
-    // --- étape 1 : contrat / capacité DSP valide pour l'asset
+    // --- step 1: valid DSP contract / capacity for the asset
     let contract = null;
     const cap = await this.pool.query(
       `SELECT c.id, c.asset_uri, c.assignee_did, c.policy_jsonld, c.agreement_id
@@ -63,7 +63,7 @@ module.exports = function (RED) {
     if (cap.rows.length > 0) {
       contract = cap.rows[0];
     } else if (isInternal) {
-      // contrat-cadre « orga interne » émis à la première requête (asset = base IRI du pod)
+      // internal-org "framework contract" issued on first request (asset = pod base IRI)
       const agreementId = 'cadre:' + claims.webid;
       const ins = await this.pool.query(
         `INSERT INTO dsp.contracts (asset_uri, assignee_did, policy_jsonld, state, agreement_id, expires_at)
@@ -78,7 +78,7 @@ module.exports = function (RED) {
          ON CONFLICT (token_hash) DO UPDATE SET contract_id = $2, expires_at = now() + interval '1 hour'`,
         [tokenHash, contract.id]);
     } else if (claims.did) {
-      // externe : contrat négocié via le catalogue DSP (cœur), asset = conteneur
+      // external: contract negotiated via the DSP catalog (core), asset = container
       const ext = await this.pool.query(
         `SELECT id, asset_uri, assignee_did, policy_jsonld, agreement_id FROM dsp.contracts
          WHERE assignee_did = $1 AND state = 'active'
@@ -96,14 +96,14 @@ module.exports = function (RED) {
       return { allow: false, status: 401, reason: 'no-token-claims' };
     }
 
-    // --- étape 2 : ACL de la ressource (auth.can avec contexte de session, deny silencieux)
+    // --- step 2: resource ACL (auth.can with session context, silent deny)
     const acl = await withAcl(this.pool, claims, this.baseIri, resourceUri, mode);
     if (!acl) {
       await this._audit(contract.agreement_id, claims.webid, resourceUri, mode, 'deny');
       return deny('acl-deny');
     }
 
-    // --- étape 3 : obligations ODRL du contrat (v1 : facis:resourceId isAnyOf/isAllOf)
+    // --- step 3: contract ODRL obligations (v1: facis:resourceId isAnyOf/isAllOf)
     const obligations = await this._obligations(contract, resourceUri);
     if (!obligations.allow) {
       await this._audit(contract.agreement_id, claims.webid, resourceUri, mode, 'deny');
@@ -113,8 +113,8 @@ module.exports = function (RED) {
     return { allow: true, status: 200, agreementId: contract.agreement_id, obligations: obligations.constraints };
   };
 
-  // CA-L11 : clé inline `permissions` pour le demandeur (compatibilité solid-ac-checker de sib-core).
-  // view=read(ressource), add=write(conteneur), change/delete=write(ressource), control=control(ressource).
+  // AC-L11: inline `permissions` key for the requester (solid-ac-checker compatibility of sib-core).
+  // view=read(resource), add=write(container), change/delete=write(resource), control=control(resource).
   PdpNode.prototype.permissions = async function ({ claims, resourceUri, containerUri }) {
     const client = await this.pool.connect();
     try {
@@ -146,7 +146,7 @@ module.exports = function (RED) {
       [agreementId, webid, resourceUri, mode, decision]).catch(() => {});
   };
 
-  // contrainte facis:resourceId isAnyOf [37,44,52] → seules ces ressources servies (CA-L5)
+  // facis:resourceId isAnyOf [37,44,52] constraint → only those resources served (AC-L5)
   PdpNode.prototype._obligations = async function (contract, resourceUri) {
     let policy = contract.policy_jsonld;
     if (typeof policy === 'string') { try { policy = JSON.parse(policy); } catch { policy = {}; } }
@@ -173,7 +173,7 @@ module.exports = function (RED) {
     try {
       await client.query('BEGIN');
       await client.query("SELECT set_config('app.base_iri', $1, true)", [baseIri]);
-      const webid = claims.webid || claims.did; // externe : le DID est le sujet ACL
+      const webid = claims.webid || claims.did; // external: the DID is the ACL subject
       if (webid) await client.query("SELECT set_config('app.webid', $1, true)", [webid]);
       if (claims.role) await client.query("SELECT set_config('app.role', $1, true)", [claims.role]);
       const r = await client.query('SELECT auth.can($1, $2) AS ok', [resourceUri, mode]);

@@ -1,14 +1,14 @@
-// fragment.js — ext/model-injection (E11) : validation, canonicalisation et compilation DDL
-// du fragment de modèle déclaratif (annexe A de atlas/spec/model-injection-spec.md v0.3).
-// Pur et sans dépendance (testable hors Node-RED) : tout nom passe par quoteIdent(),
-// toute valeur littérale par quoteLiteral() → aucune injection SQL possible (§4.2/§4.6).
+// fragment.js — ext/model-injection (E11): validation, canonicalization and DDL compilation
+// of the declarative model fragment (annex A of atlas/spec/model-injection-spec.md v0.3).
+// Pure and dependency-free (testable outside Node-RED): every name goes through quoteIdent(),
+// every literal value through quoteLiteral() → no SQL injection possible (§4.2/§4.6).
 const crypto = require('crypto');
 
 const SLUG_RE = /^[a-z][a-z0-9_]{1,30}$/;
 const NAME_RE = /^[a-z][a-z0-9_]{0,62}$/;
 const TYPES = ['text', 'bigint', 'numeric', 'boolean', 'timestamptz', 'jsonb'];
 const PG_TYPES = { text: 'text', bigint: 'bigint', numeric: 'numeric', boolean: 'boolean', timestamptz: 'timestamptz', jsonb: 'jsonb' };
-const SAFE_DEFAULT_EXPRS = new Set(['now()', 'true', 'false']); // §4.6 : le reste passe en quote_literal
+const SAFE_DEFAULT_EXPRS = new Set(['now()', 'true', 'false']); // §4.6: anything else goes through quote_literal
 const TABLE_KEYS = new Set(['pk', 'owner', 'published', 'tombstone', 'outbox', 'fields']);
 const FIELD_KEYS = new Set(['type', 'serial', 'not_null', 'unique', 'default', 'check_in', 'fk']);
 
@@ -24,24 +24,24 @@ class FragmentError extends Error {
   constructor(code, message) { super(message); this.name = 'FragmentError'; this.code = code; }
 }
 
-// quote_ident / quote_literal (les noms sont déjà contraints par regex, on quote quand même)
+// quote_ident / quote_literal (names are already regex-constrained, we quote anyway)
 function quoteIdent(name) { return '"' + String(name).replace(/"/g, '""') + '"'; }
 function quoteLiteral(v) { return "'" + String(v).replace(/'/g, "''") + "'"; }
 
 function physicalTable(slug, table) { return 'store_' + slug + '_' + table; }
 
-// ---------- validation (annexe A + règles §4) ----------
+// ---------- validation (annex A + §4 rules) ----------
 
 function validateFragment(fragment, rawBytes) {
   if (rawBytes !== undefined && rawBytes > QUOTAS.maxPayloadBytes)
-    throw new FragmentError('quota_exceeded', `payload fragment > ${QUOTAS.maxPayloadBytes} octets (§4.5)`);
+    throw new FragmentError('quota_exceeded', `fragment payload > ${QUOTAS.maxPayloadBytes} bytes (§4.5)`);
   if (!fragment || typeof fragment !== 'object' || Array.isArray(fragment))
-    throw new FragmentError('schema_violation', 'fragment: objet racine attendu');
+    throw new FragmentError('schema_violation', 'fragment: root object expected');
   for (const k of Object.keys(fragment))
-    if (k !== 'tables') throw new FragmentError('schema_violation', `clé racine non autorisée: ${k}`);
+    if (k !== 'tables') throw new FragmentError('schema_violation', `unauthorized root key: ${k}`);
   const tables = fragment.tables;
   if (!tables || typeof tables !== 'object' || Array.isArray(tables))
-    throw new FragmentError('schema_violation', 'fragment.tables: objet requis');
+    throw new FragmentError('schema_violation', 'fragment.tables: object required');
   const tableNames = Object.keys(tables);
   if (tableNames.length < 1) throw new FragmentError('schema_violation', 'fragment.tables: min 1 table');
   if (tableNames.length > QUOTAS.maxTables)
@@ -49,95 +49,95 @@ function validateFragment(fragment, rawBytes) {
 
   let totalFields = 0;
   for (const [tName, spec] of Object.entries(tables)) {
-    if (!NAME_RE.test(tName)) throw new FragmentError('invalid_identifier', `nom de table hors regex: ${tName}`);
+    if (!NAME_RE.test(tName)) throw new FragmentError('invalid_identifier', `table name outside regex: ${tName}`);
     if (!spec || typeof spec !== 'object' || Array.isArray(spec))
-      throw new FragmentError('schema_violation', `table ${tName}: objet attendu`);
+      throw new FragmentError('schema_violation', `table ${tName}: object expected`);
     for (const k of Object.keys(spec))
-      if (!TABLE_KEYS.has(k)) throw new FragmentError('schema_violation', `table ${tName}: clé non autorisée ${k}`);
+      if (!TABLE_KEYS.has(k)) throw new FragmentError('schema_violation', `table ${tName}: unauthorized key ${k}`);
     if (typeof spec.pk !== 'string' || !NAME_RE.test(spec.pk))
-      throw new FragmentError('invalid_identifier', `table ${tName}: pk invalide`);
+      throw new FragmentError('invalid_identifier', `table ${tName}: invalid pk`);
     if (!spec.fields || typeof spec.fields !== 'object')
-      throw new FragmentError('schema_violation', `table ${tName}: fields requis`);
+      throw new FragmentError('schema_violation', `table ${tName}: fields required`);
 
-    // v1 : les triggers génériques du socle (app.version_trigger etc.) utilisent NEW.id
-    // → la pk d'une table injectée DOIT être la colonne "id" bigint serial.
+    // v1: the base generic triggers (app.version_trigger etc.) use NEW.id
+    // → the pk of an injected table MUST be the "id" bigint serial column.
     if (spec.pk !== 'id')
-      throw new FragmentError('schema_violation', `table ${tName}: pk doit être "id" en v1 (triggers du socle)`);
+      throw new FragmentError('schema_violation', `table ${tName}: pk must be "id" in v1 (base triggers)`);
 
     if (spec.owner !== undefined && spec.owner !== null) {
-      if (!NAME_RE.test(spec.owner)) throw new FragmentError('invalid_identifier', `table ${tName}: owner invalide`);
+      if (!NAME_RE.test(spec.owner)) throw new FragmentError('invalid_identifier', `table ${tName}: invalid owner`);
     }
     if (spec.tombstone !== undefined && spec.tombstone !== null) {
-      if (!NAME_RE.test(spec.tombstone)) throw new FragmentError('invalid_identifier', `table ${tName}: tombstone invalide`);
+      if (!NAME_RE.test(spec.tombstone)) throw new FragmentError('invalid_identifier', `table ${tName}: invalid tombstone`);
     }
     for (const b of ['published', 'outbox'])
       if (spec[b] !== undefined && typeof spec[b] !== 'boolean')
-        throw new FragmentError('schema_violation', `table ${tName}: ${b} doit être booléen`);
+        throw new FragmentError('schema_violation', `table ${tName}: ${b} must be boolean`);
 
     const fields = spec.fields;
     const fieldNames = Object.keys(fields);
-    if (fieldNames.length < 1) throw new FragmentError('schema_violation', `table ${tName}: min 1 champ`);
+    if (fieldNames.length < 1) throw new FragmentError('schema_violation', `table ${tName}: min 1 field`);
     if (fieldNames.length > QUOTAS.maxFieldsPerTable)
-      throw new FragmentError('quota_exceeded', `table ${tName}: > ${QUOTAS.maxFieldsPerTable} champs (§4.5)`);
+      throw new FragmentError('quota_exceeded', `table ${tName}: > ${QUOTAS.maxFieldsPerTable} fields (§4.5)`);
     totalFields += fieldNames.length;
 
     for (const [fName, f] of Object.entries(fields)) {
-      if (!NAME_RE.test(fName)) throw new FragmentError('invalid_identifier', `table ${tName}: champ hors regex: ${fName}`);
+      if (!NAME_RE.test(fName)) throw new FragmentError('invalid_identifier', `table ${tName}: field outside regex: ${fName}`);
       if (!f || typeof f !== 'object' || Array.isArray(f))
-        throw new FragmentError('schema_violation', `table ${tName}.${fName}: objet attendu`);
+        throw new FragmentError('schema_violation', `table ${tName}.${fName}: object expected`);
       for (const k of Object.keys(f))
-        if (!FIELD_KEYS.has(k)) throw new FragmentError('schema_violation', `champ ${tName}.${fName}: clé non autorisée ${k}`);
+        if (!FIELD_KEYS.has(k)) throw new FragmentError('schema_violation', `field ${tName}.${fName}: unauthorized key ${k}`);
       if (!TYPES.includes(f.type))
-        throw new FragmentError('schema_violation', `champ ${tName}.${fName}: type non whitelisté: ${f.type}`);
+        throw new FragmentError('schema_violation', `field ${tName}.${fName}: type not whitelisted: ${f.type}`);
       for (const b of ['serial', 'not_null', 'unique'])
         if (f[b] !== undefined && typeof f[b] !== 'boolean')
-          throw new FragmentError('schema_violation', `champ ${tName}.${fName}: ${b} doit être booléen`);
+          throw new FragmentError('schema_violation', `field ${tName}.${fName}: ${b} must be boolean`);
       if (f.default !== undefined && !['string', 'number', 'boolean'].includes(typeof f.default))
-        throw new FragmentError('schema_violation', `champ ${tName}.${fName}: default string|number|boolean`);
+        throw new FragmentError('schema_violation', `field ${tName}.${fName}: default must be string|number|boolean`);
       if (f.check_in !== undefined) {
         if (!Array.isArray(f.check_in) || f.check_in.some(x => typeof x !== 'string'))
-          throw new FragmentError('schema_violation', `champ ${tName}.${fName}: check_in = tableau de string`);
+          throw new FragmentError('schema_violation', `field ${tName}.${fName}: check_in = array of strings`);
         if (f.check_in.length > QUOTAS.maxCheckIn)
-          throw new FragmentError('quota_exceeded', `champ ${tName}.${fName}: check_in > ${QUOTAS.maxCheckIn} items`);
+          throw new FragmentError('quota_exceeded', `field ${tName}.${fName}: check_in > ${QUOTAS.maxCheckIn} items`);
       }
       if (f.fk !== undefined && f.fk !== 'users')
-        // §4.4 : FK autorisées uniquement vers app.users ; interdites entre packages
-        throw new FragmentError('blacklisted_effect', `champ ${tName}.${fName}: fk autorisée uniquement vers "users" (§4.4)`);
+        // §4.4: FKs allowed only towards app.users; forbidden between packages
+        throw new FragmentError('blacklisted_effect', `field ${tName}.${fName}: fk allowed only towards "users" (§4.4)`);
     }
 
-    // cohérence pk / owner / tombstone
+    // pk / owner / tombstone consistency
     const pkF = fields[spec.pk];
-    if (!pkF) throw new FragmentError('schema_violation', `table ${tName}: pk "${spec.pk}" absent de fields`);
+    if (!pkF) throw new FragmentError('schema_violation', `table ${tName}: pk "${spec.pk}" missing from fields`);
     if (pkF.type !== 'bigint' || pkF.serial !== true)
-      throw new FragmentError('schema_violation', `table ${tName}: pk "id" doit être {type:bigint, serial:true}`);
+      throw new FragmentError('schema_violation', `table ${tName}: pk "id" must be {type:bigint, serial:true}`);
     if (spec.owner !== undefined && spec.owner !== null) {
       const o = fields[spec.owner];
-      if (!o) throw new FragmentError('schema_violation', `table ${tName}: owner "${spec.owner}" absent de fields`);
+      if (!o) throw new FragmentError('schema_violation', `table ${tName}: owner "${spec.owner}" missing from fields`);
       if (o.type !== 'bigint' || o.fk !== 'users')
-        throw new FragmentError('schema_violation', `table ${tName}: owner doit être bigint fk users`);
+        throw new FragmentError('schema_violation', `table ${tName}: owner must be bigint fk users`);
     }
     if (spec.tombstone !== undefined && spec.tombstone !== null) {
       const t = fields[spec.tombstone];
-      if (!t) throw new FragmentError('schema_violation', `table ${tName}: tombstone "${spec.tombstone}" absent de fields`);
+      if (!t) throw new FragmentError('schema_violation', `table ${tName}: tombstone "${spec.tombstone}" missing from fields`);
       if (t.type !== 'timestamptz')
-        throw new FragmentError('schema_violation', `table ${tName}: tombstone doit être timestamptz`);
+        throw new FragmentError('schema_violation', `table ${tName}: tombstone must be timestamptz`);
     }
   }
   if (totalFields > QUOTAS.maxFieldsPerPackage)
-    throw new FragmentError('quota_exceeded', `> ${QUOTAS.maxFieldsPerPackage} champs/package (§4.5)`);
+    throw new FragmentError('quota_exceeded', `> ${QUOTAS.maxFieldsPerPackage} fields/package (§4.5)`);
   return true;
 }
 
-// ---------- canonicalisation (hash anti-drift, §5) ----------
-// Forme canonique comparée au schéma live : structure colonnes uniquement (type/serial/not_null),
-// triée récursivement → sha256 stable.
+// ---------- canonicalization (anti-drift hash, §5) ----------
+// Canonical form compared to the live schema: column structure only (type/serial/not_null),
+// recursively sorted → stable sha256.
 
 function canonicalForCompare(fragment) {
   const tables = {};
   for (const [tName, spec] of Object.entries(fragment.tables)) {
     const fields = {};
     for (const [fName, f] of Object.entries(spec.fields)) {
-      // un champ serial est NOT NULL en base (bigserial) → normalisé pour comparer au schéma live
+      // a serial field is NOT NULL in the DB (bigserial) → normalized to compare with the live schema
       fields[fName] = { type: f.type, serial: !!f.serial, not_null: !!f.not_null || !!f.serial };
     }
     tables[tName] = { pk: spec.pk, fields };
@@ -155,12 +155,12 @@ function fragmentHash(fragment) {
   return crypto.createHash('sha256').update(canonicalForCompare(fragment), 'utf8').digest('hex');
 }
 
-// ---------- compilation DDL (whitelist des effets, §4.3) ----------
-// Retourne { hash, tables: [{ logical, physical, container, pattern, published, statements }] }
-// Toutes les tables vivent dans le schéma app, nommées store_<slug>_<table> (préfixe tranché §1.4).
+// ---------- DDL compilation (effect whitelist, §4.3) ----------
+// Returns { hash, tables: [{ logical, physical, container, pattern, published, statements }] }
+// All tables live in the app schema, named store_<slug>_<table> (truncated prefix §1.4).
 
 function compileFragment(slug, fragment) {
-  if (!SLUG_RE.test(slug)) throw new FragmentError('invalid_identifier', `slug hors regex: ${slug}`);
+  if (!SLUG_RE.test(slug)) throw new FragmentError('invalid_identifier', `slug outside regex: ${slug}`);
   const tables = [];
   for (const [tName, spec] of Object.entries(fragment.tables)) {
     const physical = physicalTable(slug, tName);
@@ -172,7 +172,7 @@ function compileFragment(slug, fragment) {
     const cols = [];
     for (const [fName, f] of Object.entries(spec.fields)) {
       let sql = quoteIdent(fName) + ' ';
-      if (f.serial) sql += 'bigserial';                       // pk id serial (imposé en v1)
+      if (f.serial) sql += 'bigserial';                       // serial id pk (enforced in v1)
       else sql += PG_TYPES[f.type];
       if (fName === spec.pk) sql += ' PRIMARY KEY';
       if (f.not_null && fName !== spec.pk) sql += ' NOT NULL';
@@ -186,7 +186,7 @@ function compileFragment(slug, fragment) {
     statements.push(`GRANT SELECT, INSERT, UPDATE, DELETE ON app.${quoteIdent(physical)} TO app`);
     statements.push(`GRANT USAGE, SELECT ON SEQUENCE app.${quoteIdent(physical + '_' + spec.pk + '_seq')} TO app`);
 
-    // triggers génériques du socle (whitelist §4.3)
+    // base generic triggers (whitelist §4.3)
     const has = (f) => spec.fields[f] !== undefined;
     const trigger = (name, fn, event) => {
       statements.push(`DROP TRIGGER IF EXISTS ${name} ON app.${quoteIdent(physical)}`);
@@ -197,7 +197,7 @@ function compileFragment(slug, fragment) {
     if (spec.tombstone) trigger('tombstone', 'tombstone_trigger', 'AFTER UPDATE');
     if (spec.outbox) trigger('outbox', 'outbox_trigger', 'AFTER INSERT OR UPDATE');
 
-    // RLS par défaut via auth.can (mêmes conventions que le core, IRI logique /apps/<slug>/<table>/)
+    // default RLS via auth.can (same conventions as the core, logical IRI /apps/<slug>/<table>/)
     const qT = `app.${quoteIdent(physical)}`;
     const iriExpr = `rtrim(current_setting('app.base_iri', true), '/') || ${quoteLiteral(container)} || ${quoteIdent(spec.pk)}::text`;
     const containerExpr = `rtrim(current_setting('app.base_iri', true), '/') || ${quoteLiteral(container)}`;
@@ -205,7 +205,7 @@ function compileFragment(slug, fragment) {
     statements.push(`ALTER TABLE ${qT} FORCE ROW LEVEL SECURITY`);
     const policy = (name, cmd, expr) => {
       statements.push(`DROP POLICY IF EXISTS ${name} ON ${qT}`);
-      if (cmd === 'INSERT') // INSERT : WITH CHECK seul (comme le core)
+      if (cmd === 'INSERT') // INSERT: WITH CHECK only (like the core)
         statements.push(`CREATE POLICY ${name} ON ${qT} FOR INSERT WITH CHECK (${expr})`);
       else if (cmd === 'UPDATE')
         statements.push(`CREATE POLICY ${name} ON ${qT} FOR UPDATE USING (${expr}) WITH CHECK (${expr})`);
@@ -222,7 +222,7 @@ function compileFragment(slug, fragment) {
   return { hash: fragmentHash(fragment), tables };
 }
 
-// §4.6 : now()/true/false et nombres émis tels quels ; toute autre chaîne via quote_literal (sûr)
+// §4.6: now()/true/false and numbers emitted as-is; any other string via quote_literal (safe)
 function defaultSql(d) {
   if (typeof d === 'number') return String(d);
   if (typeof d === 'boolean') return d ? 'true' : 'false';
@@ -230,8 +230,8 @@ function defaultSql(d) {
   return quoteLiteral(d);
 }
 
-// ---------- schéma live → canonique (détection de drift au boot, §5) ----------
-// Lit information_schema pour les app.store_<slug>_* et reconstruit la forme canonique comparable.
+// ---------- live schema → canonical (drift detection at boot, §5) ----------
+// Reads information_schema for app.store_<slug>_* and rebuilds the comparable canonical form.
 
 async function liveCanonical(client, slug) {
   const prefix = 'store_' + slug + '_';
@@ -254,7 +254,7 @@ async function liveCanonical(client, slug) {
     const logical = r.table_name.slice(prefix.length);
     const typeMap = { 'bigint': 'bigint', 'text': 'text', 'numeric': 'numeric', 'boolean': 'boolean', 'timestamp with time zone': 'timestamptz', 'jsonb': 'jsonb' };
     const type = typeMap[r.data_type];
-    if (!type) continue; // type non DSL → drift visible via hash différent
+    if (!type) continue; // non-DSL type → drift visible via different hash
     tables[logical] = tables[logical] || { pk: pkOf[r.table_name] || 'id', fields: {} };
     tables[logical].fields[r.column_name] = {
       type,

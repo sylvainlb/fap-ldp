@@ -8,7 +8,7 @@
   "clients": [
     {
       "clientId": "fap-front",
-      "name": "Front Startin'blox (pré-enregistré statiquement — décision I, pas de dynamic registration)",
+      "name": "Front Startin'blox (statically pre-registered — decision I, no dynamic registration)",
       "enabled": true,
       "publicClient": true,
       "standardFlowEnabled": true,
@@ -62,10 +62,10 @@
       "enabled": true,
       "email": "alice@${DOMAIN}",
       "firstName": "Alice",
-      "lastName": "Gestionnaire",
+      "lastName": "Manager",
       "attributes": {
         "webid": ["https://${DOMAIN}/users/1"],
-        "role": ["gestionnaire"]
+        "role": ["manager"]
       },
       "credentials": [{ "type": "password", "value": "${ALICE_PASSWORD}", "temporary": false }]
     }

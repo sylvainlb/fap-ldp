@@ -1,5 +1,5 @@
-// jsonpatch.js — JSON Patch (RFC 6902) : add / remove / replace / move / copy / test
-// Pointeurs JSON Pointer : /a/b/0, échappement ~0 (~) et ~1 (/).
+// jsonpatch.js — JSON Patch (RFC 6902): add / remove / replace / move / copy / test
+// JSON Pointer pointers: /a/b/0, escaping ~0 (~) and ~1 (/).
 
 function parsePointer(p) {
   if (p === '') return [];
@@ -9,7 +9,7 @@ function parsePointer(p) {
 function getParent(doc, parts) {
   let cur = doc;
   for (let i = 0; i < parts.length - 1; i++) {
-    if (cur == null) throw new Error('json-patch: chemin invalide ' + parts.join('/'));
+    if (cur == null) throw new Error('json-patch: invalid path ' + parts.join('/'));
     cur = cur[parts[i]];
   }
   return { parent: cur, key: parts[parts.length - 1] };
@@ -25,7 +25,7 @@ function applyOp(doc, op) {
         if (op.op === 'add') parent.splice(idx, 0, op.value);
         else parent[idx] = op.value;
       } else {
-        if (op.op === 'replace' && !(key in parent)) throw new Error('json-patch: replace sur clé absente ' + op.path);
+        if (op.op === 'replace' && !(key in parent)) throw new Error('json-patch: replace on missing key ' + op.path);
         parent[key] = op.value;
       }
       return doc;
@@ -53,12 +53,12 @@ function applyOp(doc, op) {
       return doc;
     }
     default:
-      throw new Error('json-patch: op inconnue ' + op.op);
+      throw new Error('json-patch: unknown op ' + op.op);
   }
 }
 
 function apply(doc, ops) {
-  if (!Array.isArray(ops)) throw new Error('json-patch: le corps doit être un tableau d\'opérations');
+  if (!Array.isArray(ops)) throw new Error('json-patch: body must be an array of operations');
   let out = structuredClone(doc);
   for (const op of ops) out = applyOp(out, op);
   return out;

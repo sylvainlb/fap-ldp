@@ -1,10 +1,10 @@
-// pgpool.js — pool PG par rôle + helper de session PEP.
-// Le PEP ouvre une transaction, pose le contexte (SET LOCAL app.webid / app.role / app.base_iri)
-// depuis les claims du token, exécute la requête (RLS filtre alors les lignes), commit.
+// pgpool.js — per-role PG pool + PEP session helper.
+// The PEP opens a transaction, sets the context (SET LOCAL app.webid / app.role / app.base_iri)
+// from the token claims, runs the query (RLS then filters the rows), commits.
 const { Pool } = require('pg');
 
 function createPool(config) {
-  // DSN prioritaire (compose fournit PG_*_DSN) : postgres://user:pass@host:port/db
+  // DSN takes priority (compose provides PG_*_DSN): postgres://user:pass@host:port/db
   if (config.pgDsn) {
     return new Pool({ connectionString: config.pgDsn, max: parseInt(config.pgPoolMax || '5', 10) });
   }
@@ -18,14 +18,14 @@ function createPool(config) {
   });
 }
 
-// Exécute fn(client) dans une transaction avec le contexte de session posé.
+// Runs fn(client) inside a transaction with the session context set.
 async function withSession(pool, claims, baseIri, fn) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // set_config accepte les paramètres ($1), contrairement à SET LOCAL x = $1
+    // set_config accepts parameters ($1), unlike SET LOCAL x = $1
     await client.query("SELECT set_config('app.base_iri', $1, true)", [baseIri]);
-    // externe sans webid : le DID fait office de sujet ACL
+    // external without webid: the DID acts as the ACL subject
     const webid = claims.webid || claims.did;
     if (webid) await client.query("SELECT set_config('app.webid', $1, true)", [webid]);
     if (claims.role) await client.query("SELECT set_config('app.role', $1, true)", [claims.role]);

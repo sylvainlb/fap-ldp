@@ -1,19 +1,19 @@
--- 006_maintenance.sql — purge physique RGPD (spec fap-ldp v0.2 §5.2, §8)
--- Tombstones + versions conservés 30 jours, purge hebdomadaire par pg_cron.
--- Si pg_cron n'est pas installé, exécuter manuellement (cron système) :
+-- 006_maintenance.sql — GDPR physical purge (spec fap-ldp v0.2 §5.2, §8)
+-- Tombstones + versions kept 30 days, weekly purge by pg_cron.
+-- If pg_cron is not installed, run manually (system cron):
 --   psql -c "SELECT app.purge_old_tombstones()"
 
--- SECURITY DEFINER : la purge s'exécute hors session PEP (sans app.webid) et FORCE ROW LEVEL
--- SECURITY s'applique même au owner des tables ; les migrations doivent donc tourner en
--- superuser (postgres), comme dans compose/.
+-- SECURITY DEFINER: the purge runs outside the PEP session (without app.webid) and FORCE ROW LEVEL
+-- SECURITY applies even to the table owner; migrations must therefore run as
+-- superuser (postgres), as in compose/.
 CREATE OR REPLACE FUNCTION app.purge_old_tombstones(retention interval DEFAULT interval '30 days')
 RETURNS integer AS $$
 DECLARE
   n integer := 0;
   r record;
 BEGIN
-  -- Supprime physiquement les lignes soft-deletées au-delà de la rétention,
-  -- et les versions/tombstones associées.
+  -- Physically deletes soft-deleted rows beyond the retention,
+  -- and the associated versions/tombstones.
   FOR r IN
     SELECT table_name, row_id FROM app.tombstones WHERE deleted_at < now() - retention
   LOOP
@@ -26,14 +26,14 @@ BEGIN
   RETURN n;
 END $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Planification pg_cron si l'extension est disponible (profil light l'embarque).
+-- pg_cron scheduling if the extension is available (light profile embeds it).
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
     IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'fap-ldp-purge-tombstones') THEN
       PERFORM cron.schedule(
         'fap-ldp-purge-tombstones',
-        '0 3 * * 0',                               -- dimanche 03:00
+        '0 3 * * 0',                               -- Sunday 03:00
         'SELECT app.purge_old_tombstones()');
     END IF;
   END IF;

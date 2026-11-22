@@ -1,15 +1,15 @@
 -- 002_auth.sql — auth.acl + auth.can() (spec fap-ldp v0.2 §7.2)
--- Correctif v0.2 : l'héritage (inherited) ne s'applique qu'aux conteneurs, c'est-à-dire aux
--- resource_uri se terminant par '/' — sinon une ACL sur /tickets/37 s'appliquerait aussi à
--- /tickets/370. starts_with évite les wildcards LIKE (%/_ dans les IRI).
--- claim absent → current_setting(..., true) = NULL → aucun match → deny silencieux.
+-- v0.2 fix: inheritance (inherited) applies only to containers, i.e. to
+-- resource_uri ending with '/' — otherwise an ACL on /tickets/37 would also apply to
+-- /tickets/370. starts_with avoids LIKE wildcards (%/_ in IRIs).
+-- missing claim → current_setting(..., true) = NULL → no match → silent deny.
 
 CREATE TABLE IF NOT EXISTS auth.acl (
   id bigserial PRIMARY KEY,
-  resource_uri text NOT NULL,        -- IRI ressource ou conteneur (conteneur = slash final "/")
-  subject text NOT NULL,             -- webid/did, 'role:xxx', ou 'foaf:Agent' (public)
+  resource_uri text NOT NULL,        -- resource or container IRI (container = trailing "/")
+  subject text NOT NULL,             -- webid/did, 'role:xxx', or 'foaf:Agent' (public)
   modes text[] NOT NULL,             -- read / write / append / control
-  inherited boolean DEFAULT true,    -- n'a d'effet que si resource_uri se termine par '/'
+  inherited boolean DEFAULT true,    -- only effective if resource_uri ends with '/'
   created_at timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS acl_resource_uri_idx ON auth.acl (resource_uri);
@@ -27,9 +27,9 @@ CREATE OR REPLACE FUNCTION auth.can(res text, mode text) RETURNS boolean AS $$
       AND mode = ANY(a.modes));
 $$ LANGUAGE sql STABLE;
 
--- Le PEP (rôle app) lit/écrit les ACL via *.acl ; la fonction est exécutée dans les policies RLS.
--- Changement d'ACL = révocation potentielle → pg_notify('fap_revoked') → le PDP purge son
--- cache de décision immédiatement (spec §7.5, CA-L9). Payload = resource_uri.
+-- The PEP (app role) reads/writes ACLs via *.acl; the function runs inside the RLS policies.
+-- ACL change = potential revocation → pg_notify('fap_revoked') → the PDP purges its
+-- decision cache immediately (spec §7.5, AC-L9). Payload = resource_uri.
 CREATE OR REPLACE FUNCTION auth.notify_acl_changed() RETURNS trigger AS $$
 BEGIN
   PERFORM pg_notify('fap_revoked', coalesce(NEW.resource_uri, OLD.resource_uri, ''));

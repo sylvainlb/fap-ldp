@@ -21,31 +21,31 @@ RED.nodes.registerType('fap-ldp-mi-admin', {
 });
 </script>
 <script type="text/html" data-template-name="fap-ldp-mi-admin">
-  <div class="form-row"><label>Nom</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label>Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label>Base IRI</label><input type="text" id="node-input-baseIri"></div>
-  <div class="form-row"><label>Quota pod (max packages)</label><input type="text" id="node-input-maxPackages"></div>
+  <div class="form-row"><label>Pod quota (max packages)</label><input type="text" id="node-input-maxPackages"></div>
   <hr>
-  <div class="form-row"><label>PG DSN (rôle admin)</label><input type="text" id="node-input-pgDsn" placeholder="postgres://admin:***@pg:5432/fap"></div>
+  <div class="form-row"><label>PG DSN (admin role)</label><input type="text" id="node-input-pgDsn" placeholder="postgres://admin:***@pg:5432/fap"></div>
   <div class="form-row"><label>PG host</label><input type="text" id="node-input-pgHost"></div>
   <div class="form-row"><label>PG port</label><input type="text" id="node-input-pgPort"></div>
-  <div class="form-row"><label>PG base</label><input type="text" id="node-input-pgDatabase"></div>
+  <div class="form-row"><label>PG database</label><input type="text" id="node-input-pgDatabase"></div>
   <div class="form-row"><label>PG user (admin)</label><input type="text" id="node-input-pgUser"></div>
   <div class="form-row"><label>PG password</label><input type="password" id="node-input-pgPassword"></div>
   <hr>
-  <div class="form-row"><label>IdP userinfo URL</label><input type="text" id="node-input-idpUserinfoUrl" placeholder="ou 'false'"></div>
+  <div class="form-row"><label>IdP userinfo URL</label><input type="text" id="node-input-idpUserinfoUrl" placeholder="or 'false'"></div>
   <div class="form-row"><label>devTokens (TCK)</label><input type="text" id="node-input-devTokens" placeholder='{"tok-admin":{"webid":"…","role":"admin"}}'></div>
 </script>
 <script type="text/html" data-help-name="fap-ldp-mi-admin">
-  <p>Extension <b>model-injection (E11)</b> — endpoints admin du contrat d'injection
-  (spec <code>model-injection-spec.md</code> v0.3 §3) :</p>
+  <p><b>model-injection (E11)</b> extension — admin endpoints of the injection contract
+  (spec <code>model-injection-spec.md</code> v0.3 §3):</p>
   <ul>
-    <li><code>POST /admin/apps</code> → install gouverné d'un package (une transaction : validation annexe A,
-      quotas, accord de contribution <code>dsp.contracts</code>, DDL <code>app.store_&lt;slug&gt;_*</code>,
-      <code>dsp.asset_mapping</code>, ACL initiales, audit) → <code>201</code> + <code>Location: /apps/&lt;slug&gt;/meta</code></li>
-    <li><code>DELETE /admin/apps/&lt;slug&gt;</code> → révocation (contrat révoqué, asset dépublié, purge cache PDP)</li>
-    <li><code>GET /apps/</code> et <code>GET /apps/&lt;slug&gt;/meta</code> → lecture, tout utilisateur authentifié</li>
+    <li><code>POST /admin/apps</code> → governed package install (one transaction: annex A validation,
+      quotas, contribution agreement <code>dsp.contracts</code>, DDL <code>app.store_&lt;slug&gt;_*</code>,
+      <code>dsp.asset_mapping</code>, initial ACLs, audit) → <code>201</code> + <code>Location: /apps/&lt;slug&gt;/meta</code></li>
+    <li><code>DELETE /admin/apps/&lt;slug&gt;</code> → revocation (contract revoked, asset unpublished, PDP cache purge)</li>
+    <li><code>GET /apps/</code> and <code>GET /apps/&lt;slug&gt;/meta</code> → read, any authenticated user</li>
   </ul>
-  <p>v1 : écriture = rôle <b>admin</b> seul. Erreurs JSON-LD <code>dspace:Error</code>
+  <p>v1: writes = <b>admin</b> role only. JSON-LD <code>dspace:Error</code> errors
   (<code>schema_violation</code>, <code>invalid_identifier</code>, <code>blacklisted_effect</code>,
-  <code>quota_exceeded</code>, <code>prefix_collision</code>). Connexion PG en rôle <b>admin</b> (DDL = migration).</p>
+  <code>quota_exceeded</code>, <code>prefix_collision</code>). PG connection as the <b>admin</b> role (DDL = migration).</p>
 </script>

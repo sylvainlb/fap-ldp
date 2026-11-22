@@ -1,12 +1,12 @@
--- 004_app.sql — DDL du domaine app.* (spec fap-ldp v0.2 §5.1) + versioning, tombstones, outbox (§5.2/§5.3)
--- Modèle issu de la spec supervision §4.1 (User, Building, Ticket, Comment).
+-- 004_app.sql — DDL of the app.* domain (spec fap-ldp v0.2 §5.1) + versioning, tombstones, outbox (§5.2/§5.3)
+-- Model from the supervision spec §4.1 (User, Building, Ticket, Comment).
 
 CREATE TABLE IF NOT EXISTS app.users (
   id bigserial PRIMARY KEY,
   webid text UNIQUE NOT NULL,
   name text NOT NULL,
   email text UNIQUE,
-  role text NOT NULL CHECK (role IN ('gestionnaire','technicien','admin')),
+  role text NOT NULL CHECK (role IN ('manager','technician','admin')),
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS app.buildings (
   address text,
   meter_id text,
   facis_asset text,
-  lat double precision,                          -- WGS84 (change request front §13.4)
-  lon double precision,                              -- IRI de l'asset catalogue DSP
+  lat double precision,                          -- WGS84 (front change request §13.4)
+  lon double precision,                              -- DSP catalog asset IRI
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS app.tickets (
     CHECK (status IN ('OPEN','IN_PROGRESS','RESOLVED','CLOSED')),
   priority text,
   building_id bigint NOT NULL REFERENCES app.buildings(id),
-  anomaly_ref text,                              -- IRI ligne gold
+  anomaly_ref text,                              -- gold row IRI
   created_by bigint REFERENCES app.users(id),
   assigned_to bigint REFERENCES app.users(id),
   created_at timestamptz DEFAULT now(),
@@ -49,19 +49,19 @@ CREATE TABLE IF NOT EXISTS app.comments (
   ts timestamptz DEFAULT now()
 );
 
--- Historique des versions (PUT/PATCH = nouvelle version, §5.2)
+-- Version history (PUT/PATCH = new version, §5.2)
 CREATE TABLE IF NOT EXISTS app.versions (
   id bigserial PRIMARY KEY,
   table_name text NOT NULL,
   row_id bigint NOT NULL,
   version integer NOT NULL,
   data jsonb NOT NULL,
-  changed_by text,                               -- webid depuis app.webid
+  changed_by text,                               -- webid from app.webid
   changed_at timestamptz DEFAULT now(),
   UNIQUE (table_name, row_id, version)
 );
 
--- Tombstones (DELETE = soft delete, §5.2 ; purge physique en 006_maintenance.sql)
+-- Tombstones (DELETE = soft delete, §5.2; physical purge in 006_maintenance.sql)
 CREATE TABLE IF NOT EXISTS app.tombstones (
   table_name text NOT NULL,
   row_id bigint NOT NULL,
@@ -70,25 +70,25 @@ CREATE TABLE IF NOT EXISTS app.tombstones (
   PRIMARY KEY (table_name, row_id)
 );
 
--- Outbox : retour vers la FAP par événement d'ingestion (RG-3, §5.3).
--- Un flow ORCE consomme pg_notify('fap_ingest') et lit app.outbox → INSERT bronze via la gate.
+-- Outbox: feedback to the FAP via ingestion event (RG-3, §5.3).
+-- An ORCE flow consumes pg_notify('fap_ingest') and reads app.outbox → INSERT bronze via the gate.
 CREATE TABLE IF NOT EXISTS app.outbox (
   id bigserial PRIMARY KEY,
-  event_type text NOT NULL,                      -- ex. 'tickets.INSERT'
+  event_type text NOT NULL,                      -- e.g. 'tickets.INSERT'
   payload jsonb NOT NULL,
   created_at timestamptz DEFAULT now(),
   processed_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS outbox_pending_idx ON app.outbox (id) WHERE processed_at IS NULL;
 
--- Trigger updated_at générique
+-- Generic updated_at trigger
 CREATE OR REPLACE FUNCTION app.set_updated_at() RETURNS trigger AS $$
 BEGIN
   NEW.updated_at := now();
   RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
--- Trigger de versioning générique (AFTER INSERT OR UPDATE)
+-- Generic versioning trigger (AFTER INSERT OR UPDATE)
 CREATE OR REPLACE FUNCTION app.version_trigger() RETURNS trigger AS $$
 DECLARE
   v integer;
@@ -100,8 +100,8 @@ BEGIN
   RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
--- Trigger tombstone : transition deleted_at NULL → non NULL = DELETE LDP (soft delete, §5.2).
--- Le PEP fait donc un unique UPDATE deleted_at = now() ; le tombstone est enregistré ici.
+-- Tombstone trigger: deleted_at NULL → non-NULL transition = LDP DELETE (soft delete, §5.2).
+-- The PEP therefore issues a single UPDATE deleted_at = now(); the tombstone is recorded here.
 CREATE OR REPLACE FUNCTION app.tombstone_trigger() RETURNS trigger AS $$
 BEGIN
   IF NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN
@@ -112,8 +112,8 @@ BEGIN
   RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
--- Trigger outbox + notify (RG-3). DELETE est un soft delete (UPDATE deleted_at) côté PEP,
--- donc INSERT/UPDATE suffisent ; l'événement DELETE part via le tombstone.
+-- Outbox + notify trigger (RG-3). DELETE is a soft delete (UPDATE deleted_at) on the PEP side,
+-- so INSERT/UPDATE are enough; the DELETE event goes through the tombstone.
 CREATE OR REPLACE FUNCTION app.outbox_trigger() RETURNS trigger AS $$
 BEGIN
   INSERT INTO app.outbox (event_type, payload)
@@ -142,7 +142,7 @@ BEGIN
            FOR EACH ROW EXECUTE FUNCTION app.outbox_trigger()';
 END $$;
 
--- Droits rôle app (le PEP écrit app.* avec ce rôle)
+-- app role rights (the PEP writes app.* with this role)
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA app TO app;
 GRANT EXECUTE ON FUNCTION app.set_updated_at(), app.version_trigger(), app.tombstone_trigger(), app.outbox_trigger() TO app;

@@ -18,19 +18,19 @@ RED.nodes.registerType('fap-ldp-model', {
 });
 </script>
 <script type="text/html" data-template-name="fap-ldp-model">
-  <div class="form-row"><label>Nom</label><input type="text" id="node-input-name"></div>
-  <div class="form-row"><label>Chemin model.json</label><input type="text" id="node-input-modelPath"></div>
+  <div class="form-row"><label>Name</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label>model.json path</label><input type="text" id="node-input-modelPath"></div>
   <hr>
   <div class="form-row"><label>PG host</label><input type="text" id="node-input-pgHost"></div>
   <div class="form-row"><label>PG port</label><input type="text" id="node-input-pgPort"></div>
-  <div class="form-row"><label>PG base</label><input type="text" id="node-input-pgDatabase"></div>
-  <div class="form-row"><label>PG user (rôle admin, boot)</label><input type="text" id="node-input-pgUser"></div>
+  <div class="form-row"><label>PG database</label><input type="text" id="node-input-pgDatabase"></div>
+  <div class="form-row"><label>PG user (admin role, boot)</label><input type="text" id="node-input-pgUser"></div>
   <div class="form-row"><label>PG password</label><input type="password" id="node-input-pgPassword"></div>
   <div class="form-row"><label>Pool max</label><input type="text" id="node-input-pgPoolMax"></div>
 </script>
 <script type="text/html" data-help-name="fap-ldp-model">
-  <p>Nœud de boot <b>fap-ldp-model</b> : applique <code>config/model.json</code> du déploiement
+  <p>Boot node <b>fap-ldp-model</b>: applies the deployment's <code>config/model.json</code>
   (tables <code>app.&lt;table&gt;</code>, triggers, RLS, mapping <code>dsp.asset_mapping</code>).
-  Connexion en rôle <b>admin</b> (boot = migration) ; le runtime LDP utilise les rôles
-  <code>app</code>/<code>reader</code>. Exemple de modèle : <code>examples/supervision/model.json</code>.</p>
+  Connects as the <b>admin</b> role (boot = migration); the LDP runtime uses the
+  <code>app</code>/<code>reader</code> roles. Model example: <code>examples/supervision/model.json</code>.</p>
 </script>

@@ -20,23 +20,23 @@ RED.nodes.registerType('fap-ldp-pdp', {
 });
 </script>
 <script type="text/html" data-template-name="fap-ldp-pdp">
-  <div class="form-row"><label>Nom</label><input type="text" id="node-input-name"></div>
+  <div class="form-row"><label>Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label>Base IRI</label><input type="text" id="node-input-baseIri"></div>
-  <div class="form-row"><label>Org interne (claim org)</label><input type="text" id="node-input-podOrg"></div>
+  <div class="form-row"><label>Internal org (org claim)</label><input type="text" id="node-input-podOrg"></div>
   <div class="form-row"><label>Cache TTL (ms, PT1H)</label><input type="text" id="node-input-cacheTtlMs"></div>
   <hr>
   <div class="form-row"><label>PG host</label><input type="text" id="node-input-pgHost"></div>
   <div class="form-row"><label>PG port</label><input type="text" id="node-input-pgPort"></div>
-  <div class="form-row"><label>PG base</label><input type="text" id="node-input-pgDatabase"></div>
-  <div class="form-row"><label>PG user (rôle app)</label><input type="text" id="node-input-pgUser"></div>
+  <div class="form-row"><label>PG database</label><input type="text" id="node-input-pgDatabase"></div>
+  <div class="form-row"><label>PG user (app role)</label><input type="text" id="node-input-pgUser"></div>
   <div class="form-row"><label>PG password</label><input type="password" id="node-input-pgPassword"></div>
   <div class="form-row"><label>Pool max</label><input type="text" id="node-input-pgPoolMax"></div>
 </script>
 <script type="text/html" data-help-name="fap-ldp-pdp">
-  <p>Nœud PDP (Policy Decision Point) FAP-LDP — spec fap-ldp v0.2 §7.1.</p>
-  <p>Pipeline : étape 1 contrat/capacité DSP (cache TTL PT1H, purge immédiate sur
-  <code>pg_notify('fap_revoked')</code>, contrat-cadre interne si claim <code>org</code> = pod) →
-  étape 2 ACL (<code>auth.can</code> en PG avec <code>SET LOCAL app.webid/role/base_iri</code>) →
-  étape 3 obligations ODRL (<code>facis:resourceId isAnyOf</code>) + audit <code>dsp.audit</code>.</p>
-  <p>Appelé par le nœud conteneur LDP via <code>pdpNode.decide({token, claims, resourceUri, containerPath, mode, published})</code>.</p>
+  <p>FAP-LDP PDP node (Policy Decision Point) — spec fap-ldp v0.2 §7.1.</p>
+  <p>Pipeline: step 1 DSP contract/capacity (TTL PT1H cache, immediate purge on
+  <code>pg_notify('fap_revoked')</code>, internal framework contract if claim <code>org</code> = pod) →
+  step 2 ACL (<code>auth.can</code> in PG with <code>SET LOCAL app.webid/role/base_iri</code>) →
+  step 3 ODRL obligations (<code>facis:resourceId isAnyOf</code>) + audit <code>dsp.audit</code>.</p>
+  <p>Called by the LDP container node via <code>pdpNode.decide({token, claims, resourceUri, containerPath, mode, published})</code>.</p>
 </script>

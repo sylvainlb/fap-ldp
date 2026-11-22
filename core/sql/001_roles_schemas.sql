@@ -1,15 +1,15 @@
--- 001_roles_schemas.sql — rôles PG et schémas de l'extension FAP-LDP
--- Spec fap-ldp v0.2 §2 (principe 6) et §7.5. Idempotent. Exécuter en tant que admin (migrations).
+-- 001_roles_schemas.sql — PG roles and schemas of the FAP-LDP extension
+-- Spec fap-ldp v0.2 §2 (principle 6) and §7.5. Idempotent. Run as admin (migrations).
 --
--- Le cœur FAP (schémas bronze/silver/gold, rôle gate) est installé par fap-light-serveur ;
--- ce fichier n'en dépend pas et ne le modifie pas.
+-- The FAP core (bronze/silver/gold schemas, gate role) is installed by fap-light-serveur;
+-- this file neither depends on it nor modifies it.
 
 CREATE SCHEMA IF NOT EXISTS app;
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE SCHEMA IF NOT EXISTS dsp;
 
--- Rôles groupe (NOLOGIN). Les logins des pools de connexions sont créés par le déploiement
--- (compose/ via variables d'env) puis rattachés : GRANT app TO <login_app>; etc.
+-- Group roles (NOLOGIN). Connection pool logins are created by the deployment
+-- (compose/ via env vars) then attached: GRANT app TO <login_app>; etc.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gate')        THEN CREATE ROLE gate        NOLOGIN; END IF;
@@ -19,10 +19,10 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'admin')       THEN CREATE ROLE admin       NOLOGIN; END IF;
 END $$;
 
--- Moindre privilège : PUBLIC n'a rien, même en lecture.
+-- Least privilege: PUBLIC gets nothing, not even read.
 REVOKE ALL ON SCHEMA app, auth, dsp FROM PUBLIC;
 
--- Schémas du cœur : idem si présents (le cœur applique déjà la même règle, garde-fou ici).
+-- Core schemas: same if present (the core already applies the same rule, guardrail here).
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'bronze') THEN REVOKE ALL ON SCHEMA bronze FROM PUBLIC; END IF;
@@ -30,12 +30,12 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'gold')   THEN REVOKE ALL ON SCHEMA gold   FROM PUBLIC; END IF;
 END $$;
 
--- Droits par rôle sur les schémas de l'extension.
+-- Per-role rights on the extension schemas.
 GRANT USAGE ON SCHEMA app, auth, dsp TO app;
-GRANT USAGE ON SCHEMA auth, dsp TO reader;          -- lecture catalogue/contrats (admin UI)
-GRANT USAGE ON SCHEMA app TO materializer;          -- matviews gold jointes app x capteurs
+GRANT USAGE ON SCHEMA auth, dsp TO reader;          -- catalog/contracts read (admin UI)
+GRANT USAGE ON SCHEMA app TO materializer;          -- gold matviews joined app x sensors
 
--- Schémas du cœur, si présents : gate écrit bronze uniquement, reader/app lisent gold.
+-- Core schemas, if present: gate writes bronze only, reader/app read gold.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'bronze') THEN
@@ -52,5 +52,5 @@ BEGIN
   END IF;
 END $$;
 
--- admin : migrations uniquement, jamais en runtime → aucun GRANT ici (owner des objets créés
--- par les migrations, ce qui suffit pour ALTER/DROP dans les migrations futures).
+-- admin: migrations only, never at runtime → no GRANT here (owner of the objects created
+-- by the migrations, which is enough for ALTER/DROP in future migrations).
