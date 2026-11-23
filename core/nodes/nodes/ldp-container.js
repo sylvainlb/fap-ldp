@@ -52,6 +52,15 @@ module.exports = function (RED) {
       if (req.path.startsWith('/admin/')
           || /^\/apps\/?$/.test(req.path)
           || /^\/apps\/[^/]+\/meta$/.test(req.path)) return next();
+      // Reserved for ext/shacl (E5, spec app-shape-editor rev 4, A.2): published SHACL contracts,
+      // fragment read (source of truth), source index, core contract, external validation.
+      // Same nature and scope as the E11 reservation above (C5): pure route reservation,
+      // no behavior of the LDP path changes. Table names colliding with these segments
+      // (meta, shapes, validate, fragment) are rejected at injection time (annexe A v0.4).
+      if (/^\/shapes\/?$/.test(req.path)
+          || /^\/fragment$/.test(req.path)
+          || /^\/apps\/[^/]+\/(shapes|validate|fragment)$/.test(req.path)
+          || /^\/apps\/[^/]+\/[^/]+\/validate$/.test(req.path)) return next();
       handle(req, res).catch(e => {
         node.error(e.stack || e.message);
         if (!res.headersSent) sendError(res, 500, 'InternalError', e.message);
