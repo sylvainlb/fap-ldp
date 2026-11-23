@@ -22,7 +22,7 @@ write authority — this ext adds **no** constraint to it and modifies **no** co
 | `GET /fragment` | Core `model.json` + hash (F3.5) |
 | `GET /apps/<slug>/shapes` | Package contract, **published tables only** (`dsp.asset_mapping`) — 404 no published table, 410 revoked (F3.3) |
 | `GET /apps/<slug>/fragment` | Raw `model_fragment` + `fragment_hash` + state + `supersedes` (F3.5) |
-| `POST /apps/<slug>/validate`, `POST /apps/<slug>/<table>/validate` | J3 (separate branch): W3C validation report, read-only |
+| `POST /apps/<slug>/validate`, `POST /apps/<slug>/<table>/validate` | **J3**: validate an RDF/JSON-LD data graph against the contract; W3C `sh:ValidationReport` out, read-only (F4.1/C4) |
 
 Read = any authenticated pod user (same as E11 `GET /apps/`). Compilation is **lazy** (first read
 compiles, cache keyed by `fragment_hash`); E11 emits no install event and none is added (F3.1).
@@ -52,9 +52,11 @@ documented expectation F5.2 ("governed", not "incoherent").
 
 ## TCK
 
-- `tck/compiler.test.js` — `node --test tck/` : F2.1, R1.2–R1.4, F2.5, F5.3, F5.4, C3, published scope (11 tests).
-- Cross-conformance F5.1 (served JSON-LD validates against the compiled contract) and F5.2 live in
-  the J3 branch (`tck/cross-conformance.test.js`, needs a running PG).
+- `tck/compiler.test.js` + `tck/validate.test.js` — `node --test tck/` : F2.1, R1.2–R1.4, F2.5,
+  F5.3, F5.4, C3, published scope, and J3 validation (conformant/non-conformant, datatype, minCount,
+  sh:in, nodeKind, langString, sh:class, per-table scope) — 19 tests, no PG needed.
+- Cross-conformance F5.1 (served JSON-LD validates against the compiled contract) and F5.2 need a
+  running PG + LDP endpoint (`tck/cross-conformance.test.js`, e2e).
 
 ## Dependencies before full activation
 
