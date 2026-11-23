@@ -9,8 +9,19 @@ const NAME_RE = /^[a-z][a-z0-9_]{0,62}$/;
 const TYPES = ['text', 'bigint', 'numeric', 'boolean', 'timestamptz', 'jsonb'];
 const PG_TYPES = { text: 'text', bigint: 'bigint', numeric: 'numeric', boolean: 'boolean', timestamptz: 'timestamptz', jsonb: 'jsonb' };
 const SAFE_DEFAULT_EXPRS = new Set(['now()', 'true', 'false']); // §4.6: anything else goes through quote_literal
-const TABLE_KEYS = new Set(['pk', 'owner', 'published', 'tombstone', 'outbox', 'fields']);
-const FIELD_KEYS = new Set(['type', 'serial', 'not_null', 'unique', 'default', 'check_in', 'fk']);
+const TABLE_KEYS = new Set(['pk', 'owner', 'published', 'tombstone', 'outbox', 'fields',
+  // v0.4 (app-shape-editor rev 4, J1): contract-only keys, no DDL effect (compileFragment ignores them,
+  // canonicalForCompare strips them → fragment_hash/drift unaffected)
+  'align_class', 'label_i18n', 'contract_exclude']);
+const FIELD_KEYS = new Set(['type', 'serial', 'not_null', 'unique', 'default', 'check_in', 'fk',
+  // v0.4: semantic profile keys, consumed by ext/shacl only
+  'node_kind', 'lang', 'align', 'label_i18n']);
+const ROOT_KEYS = new Set(['tables', 'supersedes']); // v0.4: supersedes (R1.6) = "<slug>@<version>"
+// v0.4/A.2: table names colliding with routes reserved by the core for ext/shacl + E11
+const RESERVED_TABLES = new Set(['meta', 'shapes', 'validate', 'fragment']);
+const IRI_RE = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/;   // full IRI or prefixed form (geo:lat, dcterms:description)
+const LOCALE_RE = /^[a-z]{2}(-[A-Za-z0-9]{2,8})?$/;   // en, fr, en-US…
+const SUPERSEDES_RE = /^[a-z][a-z0-9_]{1,30}@[^^\s]+$/; // "<slug>@<version>", version pinned without ^
 
 const QUOTAS = {
   maxTables: 10,            // §4.5 quotas par package
@@ -32,13 +43,29 @@ function physicalTable(slug, table) { return 'store_' + slug + '_' + table; }
 
 // ---------- validation (annex A + §4 rules) ----------
 
+// v0.4/R1.1: label_i18n = locales object, pivot "en" mandatory when the key is present
+function validateLabelI18n(v, where) {
+  if (!v || typeof v !== 'object' || Array.isArray(v))
+    throw new FragmentError('schema_violation', `${where}: label_i18n must be an object of locales`);
+  const keys = Object.keys(v);
+  if (keys.length < 1) throw new FragmentError('schema_violation', `${where}: label_i18n empty`);
+  if (!('en' in v)) throw new FragmentError('schema_violation', `${where}: label_i18n requires the pivot key "en" (R1.1)`);
+  for (const k of keys) {
+    if (!LOCALE_RE.test(k)) throw new FragmentError('schema_violation', `${where}: invalid locale key "${k}"`);
+    if (typeof v[k] !== 'string' || !v[k]) throw new FragmentError('schema_violation', `${where}: label_i18n.${k} must be a non-empty string`);
+  }
+}
+
 function validateFragment(fragment, rawBytes) {
   if (rawBytes !== undefined && rawBytes > QUOTAS.maxPayloadBytes)
     throw new FragmentError('quota_exceeded', `fragment payload > ${QUOTAS.maxPayloadBytes} bytes (§4.5)`);
   if (!fragment || typeof fragment !== 'object' || Array.isArray(fragment))
     throw new FragmentError('schema_violation', 'fragment: root object expected');
   for (const k of Object.keys(fragment))
-    if (k !== 'tables') throw new FragmentError('schema_violation', `unauthorized root key: ${k}`);
+    if (!ROOT_KEYS.has(k)) throw new FragmentError('schema_violation', `unauthorized root key: ${k}`);
+  if (fragment.supersedes !== undefined &&
+      (typeof fragment.supersedes !== 'string' || !SUPERSEDES_RE.test(fragment.supersedes)))
+    throw new FragmentError('schema_violation', 'fragment.supersedes must be "<slug>@<version>" (R1.6)');
   const tables = fragment.tables;
   if (!tables || typeof tables !== 'object' || Array.isArray(tables))
     throw new FragmentError('schema_violation', 'fragment.tables: object required');
@@ -50,6 +77,8 @@ function validateFragment(fragment, rawBytes) {
   let totalFields = 0;
   for (const [tName, spec] of Object.entries(tables)) {
     if (!NAME_RE.test(tName)) throw new FragmentError('invalid_identifier', `table name outside regex: ${tName}`);
+    if (RESERVED_TABLES.has(tName)) // v0.4/A.2: collides with a reserved route → 422 schema_violation
+      throw new FragmentError('schema_violation', `table name reserved (A.2): ${tName}`);
     if (!spec || typeof spec !== 'object' || Array.isArray(spec))
       throw new FragmentError('schema_violation', `table ${tName}: object expected`);
     for (const k of Object.keys(spec))
@@ -73,6 +102,17 @@ function validateFragment(fragment, rawBytes) {
     for (const b of ['published', 'outbox'])
       if (spec[b] !== undefined && typeof spec[b] !== 'boolean')
         throw new FragmentError('schema_violation', `table ${tName}: ${b} must be boolean`);
+    // v0.4 table keys
+    if (spec.align_class !== undefined &&
+        (typeof spec.align_class !== 'string' || !IRI_RE.test(spec.align_class)))
+      throw new FragmentError('schema_violation', `table ${tName}: align_class must be an IRI (or prefixed form)`);
+    if (spec.label_i18n !== undefined) validateLabelI18n(spec.label_i18n, `table ${tName}`);
+    if (spec.contract_exclude !== undefined) {
+      if (!Array.isArray(spec.contract_exclude) || spec.contract_exclude.some(x => typeof x !== 'string' || !NAME_RE.test(x)))
+        throw new FragmentError('schema_violation', `table ${tName}: contract_exclude = array of field names`);
+      if (spec.contract_exclude.length > QUOTAS.maxFieldsPerTable)
+        throw new FragmentError('quota_exceeded', `table ${tName}: contract_exclude > ${QUOTAS.maxFieldsPerTable} items`);
+    }
 
     const fields = spec.fields;
     const fieldNames = Object.keys(fields);
@@ -103,7 +143,20 @@ function validateFragment(fragment, rawBytes) {
       if (f.fk !== undefined && f.fk !== 'users')
         // §4.4: FKs allowed only towards app.users; forbidden between packages
         throw new FragmentError('blacklisted_effect', `field ${tName}.${fName}: fk allowed only towards "users" (§4.4)`);
+      // v0.4 field keys (semantic profile — contract-only)
+      if (f.node_kind !== undefined && !['iri', 'literal'].includes(f.node_kind))
+        throw new FragmentError('schema_violation', `field ${tName}.${fName}: node_kind must be "iri"|"literal"`);
+      if (f.lang !== undefined && typeof f.lang !== 'boolean')
+        throw new FragmentError('schema_violation', `field ${tName}.${fName}: lang must be boolean`);
+      if (f.align !== undefined && (typeof f.align !== 'string' || !IRI_RE.test(f.align)))
+        throw new FragmentError('schema_violation', `field ${tName}.${fName}: align must be an IRI (or prefixed form)`);
+      if (f.label_i18n !== undefined) validateLabelI18n(f.label_i18n, `field ${tName}.${fName}`);
     }
+
+    // v0.4: contract_exclude entries must name existing fields of this table
+    if (spec.contract_exclude)
+      for (const x of spec.contract_exclude)
+        if (!fields[x]) throw new FragmentError('schema_violation', `table ${tName}: contract_exclude names unknown field "${x}"`);
 
     // pk / owner / tombstone consistency
     const pkF = fields[spec.pk];
@@ -130,7 +183,9 @@ function validateFragment(fragment, rawBytes) {
 
 // ---------- canonicalization (anti-drift hash, §5) ----------
 // Canonical form compared to the live schema: column structure only (type/serial/not_null),
-// recursively sorted → stable sha256.
+// recursively sorted → stable sha256. v0.4 semantic keys (node_kind/lang/align/label_i18n/
+// align_class/contract_exclude/supersedes) are INTENTIONALLY excluded: they shape the published
+// contract (ext/shacl), not the DDL → annotating a fragment never triggers a false drift.
 
 function canonicalForCompare(fragment) {
   const tables = {};
