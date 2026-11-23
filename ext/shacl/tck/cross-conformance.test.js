@@ -68,5 +68,5 @@ test('core dialect parsing: "text default ... check in (...)" / "bigint fk users
   assert.match(t, /sh:path <https:\/\/pod\.example\/ns\/app\/tickets#status>[\s\S]*?sh:in \( "CLOSED" "IN_PROGRESS" "OPEN" "RESOLVED" \)/);
   assert.match(t, /#titleProperty[\s\S]*?sh:minCount 1/);       // "text not null"
   assert.match(t, /#building_idProperty[\s\S]*?sh:datatype xsd:integer/); // fk served as integer
-  assert.match(t, /sh:targetClass <https:\/\/pod\.example\/ns\/app\/tickets#Tickets>/);
+  assert.match(t, /sh:targetClass <https:\/\/pod\.example\/ns\/app\/tickets#>/);
 });

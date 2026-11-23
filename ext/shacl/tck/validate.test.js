@@ -37,7 +37,7 @@ function dataDoc(node) {
   return {
     '@context': { ex: NS, core: CORE_NS, dcterms: 'http://purl.org/dc/terms/' },
     '@id': BASE + 'apps/flotte/vehicules/1',
-    '@type': NS + 'Store_flotte_vehicules', // served @type = prefix:Camel(table)
+    '@type': NS, // targetClass form (ns#); the served Camel form is also accepted (rev 4.1)
     'ex:immatriculation': 'AA-111',
     'ex:prix': 10.5,
     'dcterms:description': { '@value': 'Camion benne', '@language': 'fr' },

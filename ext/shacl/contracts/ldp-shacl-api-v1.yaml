@@ -5,15 +5,15 @@ apiVersion: fap.facis/contracts/v1
 kind: ExtContracts
 metadata:
   name: ldp-shacl-api
-  version: "1.1"
+  version: "1.2"
 spec:
   routes:
     - method: GET
       path: /shapes
-      summary: "SHACL contract of the core model (model.json). Turtle default, JSON-LD on Accept. ETag W/\"<sha256 of canonical Turtle>\", If-None-Match → 304. Auth: any authenticated pod user."
+      summary: "SHACL contract of the core model (model.json). Content negotiation: JSON-LD (application/ld+json) by default — chantier 3 (app-ui-editor) fetches with res.json(); Turtle when Accept: text/turtle. JSON-LD form: inline sh:property objects, rdfs:label/sh:name as locale maps, sh:in as string array, sh:targetClass/sh:class as ns# class IRIs. ETag W/\"<sha256 of canonical Turtle>\", If-None-Match → 304. Auth: any authenticated pod user."
     - method: GET
       path: /shapes/
-      summary: "Index of sources (core + packages, all states): slug, version, state, contractUri, fragmentUri, fragmentHash, supersedes. JSON-LD."
+      summary: "Index of sources (core + packages, all states): { sources: [ { kind, slug, version, state, contract (URL, chantier 3 field), package ("/apps/<slug>/meta", chantier 3 fallback), contractUri, fragmentUri, fragmentHash, supersedes, published } ] }. JSON-LD."
     - method: GET
       path: /fragment
       summary: "Core model.json (source of truth, read-only) + fragmentHash."

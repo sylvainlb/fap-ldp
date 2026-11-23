@@ -75,9 +75,13 @@ module.exports = function (RED) {
       });
     }
 
-    function wantsJsonLd(req) {
+    // Content negotiation (F3.2): Turtle when explicitly requested, JSON-LD otherwise —
+    // chantier 3 (app-ui-editor) fetches the contract with a plain res.json().
+    function wantsTurtle(req) {
       const a = String(req.headers.accept || '');
-      return /ld\+json|application\/json/.test(a) && !/text\/turtle/.test(a);
+      if (!a || a === '*/*') return false; // default → JSON-LD (chantier 3 reader)
+      if (/text\/turtle/.test(a) && !/json/.test(a)) return true;
+      return false;
     }
 
     function sendContract(req, res, compiled, uri) {
@@ -86,7 +90,7 @@ module.exports = function (RED) {
         return res.status(304).set('ETag', etag).end();
       }
       res.set('ETag', etag).set('Cache-Control', 'no-cache');
-      if (wantsJsonLd(req)) {
+      if (!wantsTurtle(req)) {
         return res.status(200).set('Content-Type', 'application/ld+json').json(compiled.jsonld);
       }
       res.status(200)

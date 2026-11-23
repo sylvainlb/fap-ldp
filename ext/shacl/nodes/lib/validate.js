@@ -114,7 +114,12 @@ function validate(dataDoc, shapes, opts = {}) {
 
   for (const shape of shapes) {
     if (only && shape.iri !== only) continue;
-    const focus = nodes.filter(n => n.types.has(shape.targetClass));
+    // focus nodes: declared targetClass (ns#, per R1.3 / chantier 3 contract.js) OR the served
+    // @type form ns#Camel(table) emitted by jsonld.resourceDoc (rev 4.1)
+    const ns = shape.iri.replace(/Shape$/, '');
+    const phys = ns.split('#')[0].split('/').pop();
+    const servedType = ns + phys.charAt(0).toUpperCase() + phys.slice(1);
+    const focus = nodes.filter(n => n.types.has(shape.targetClass) || n.types.has(servedType));
     for (const p of shape.properties) {
       for (const f of focus) {
         const values = f.props.get(p.path) || [];
@@ -137,8 +142,9 @@ function validate(dataDoc, shapes, opts = {}) {
           }
           if (p.class && v.kind === 'iri') {
             const target = byId.get(v.iri);
-            const classShape = shapes.find(s => s.iri === p.class);
-            if (classShape && target && !target.types.has(classShape.targetClass)) {
+            // sh:class = class IRI (ns#, chantier 3 form) → match the shape whose targetClass is it
+            const classShape = shapes.find(s => s.iri === p.class || s.targetClass === p.class);
+            if (classShape && target && !target.types.has(classShape.targetClass) && !target.types.has(servedTypeOf(classShape))) {
               results.push(result(f.id, p.iri, 'sh:ClassConstraintComponent',
                 `Value <${v.iri}> is not of class <${classShape.targetClass}>.`, v));
             }
@@ -148,6 +154,12 @@ function validate(dataDoc, shapes, opts = {}) {
     }
   }
   return report(results);
+}
+
+function servedTypeOf(shape) {
+  const ns = shape.iri.replace(/Shape$/, '');
+  const phys = ns.split('#')[0].split('/').pop();
+  return ns + phys.charAt(0).toUpperCase() + phys.slice(1);
 }
 
 function result(focus, shape, component, message, value) {

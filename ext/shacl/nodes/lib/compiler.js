@@ -105,9 +105,10 @@ function compile(opts) {
     const exclude = new Set([...SERVICE_FIELDS, ...(table.contract_exclude || [])]); // R1.4
     const shape = {
       iri: ns + 'Shape',
-      // R1.3 (rev 4.1): default class IRI matches the SERVED @type (jsonld.resourceDoc emits
-      // prefix:Camel(table) → ns#Camel(phys)); align_class overrides with a shared vocabulary
-      targetClass: table.align_class ? expandIri(table.align_class) : (ns + camel(phys)),
+      // R1.3: default class IRI = the namespace itself (trailing '#', empty local part) — the
+      // form expected by chantier 3 contract.js. The served @type is ns#Camel(phys); the
+      // validator accepts both forms when matching focus nodes (rev 4.1).
+      targetClass: table.align_class ? expandIri(table.align_class) : ns,
       name: labelOf(table.label_i18n, t),
       labels: labelsOf(table.label_i18n),
       properties: []
@@ -128,9 +129,11 @@ function compile(opts) {
         labels: labelsOf(fd.label_i18n),
         datatype: fd.lang === true ? 'rdf:langString' : XSD[fd.type], // F2.1
         minCount: fd.not_null ? 1 : null, // F2.1: not null → sh:minCount 1
-        in: Array.isArray(fd.check_in) && fd.check_in.length ? fd.check_in.slice().sort() : null, // sh:in
+        in: Array.isArray(fd.check_in) && fd.check_in.length ? fd.check_in.slice() : null, // sh:in, original order (chantier 3); sorted only in Turtle output
         nodeKind: iriRef ? 'sh:IRI' : null,
-        class: (iriRef && fkTarget) ? `${baseIri}ns/app/${fkTarget}#Shape` : null
+        // chantier 3 contract.js expects sh:class = the target CLASS IRI (trailing '#'),
+        // e.g. https://<pod>/ns/app/users# — not the shape IRI
+        class: (iriRef && fkTarget) ? `${baseIri}ns/app/${fkTarget}#` : null
       };
       shape.properties.push(prop);
     }
@@ -166,7 +169,7 @@ function toTurtle(shapes) {
       for (const l of p.labels) out.push(`    rdfs:label ${esc(l.value)}@${l.lang} ;`);
       if (p.datatype) out.push(`    sh:datatype ${p.datatype} ;`);
       if (p.minCount) out.push(`    sh:minCount ${p.minCount} ;`);
-      if (p.in) out.push(`    sh:in ( ${p.in.map(esc).join(' ')} ) ;`);
+      if (p.in) out.push(`    sh:in ( ${p.in.slice().sort().map(esc).join(' ')} ) ;`); // sorted here → canonical Turtle
       if (p.nodeKind) out.push(`    sh:nodeKind ${p.nodeKind} ;`);
       if (p.class) out.push(`    sh:class <${p.class}> ;`);
       out.push('    .');
@@ -176,6 +179,12 @@ function toTurtle(shapes) {
   return out.join('\n');
 }
 
+// JSON-LD serialization consumed by chantier 3 (app-ui-editor/src/contract.js):
+// - sh:property = INLINE property-shape objects (not @id refs)
+// - sh:name / rdfs:label = localized maps { "en": …, "fr": … }
+// - sh:in = plain array of strings ; sh:datatype / sh:nodeKind = prefixed forms (expanded via @context)
+// - sh:targetClass / sh:class = full IRIs, class form = namespace with trailing '#'
+// - lang fields: sh:datatype rdf:langString AND @type rdf:langString (contract.js reads @type)
 function toJsonLd(shapes, baseIri) {
   const ctx = {
     rdf: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
@@ -183,33 +192,31 @@ function toJsonLd(shapes, baseIri) {
     sh: 'http://www.w3.org/ns/shacl#',
     xsd: 'http://www.w3.org/2001/XMLSchema#'
   };
+  const labelMap = labels => Object.fromEntries(labels.map(l => [l.lang, l.value]));
   const graph = [];
   for (const s of shapes) {
     graph.push({
       '@id': s.iri,
       '@type': 'sh:NodeShape',
       'sh:targetClass': { '@id': s.targetClass },
-      'sh:name': s.name,
-      'rdfs:label': s.labels.map(l => ({ '@value': l.value, '@language': l.lang })),
-      'sh:property': s.properties.map(p => ({ '@id': p.iri }))
+      'sh:name': { en: s.name },
+      'rdfs:label': labelMap(s.labels),
+      'sh:property': s.properties.map(p => {
+        const node = {
+          '@id': p.iri,
+          '@type': p.datatype === 'rdf:langString' ? ['sh:PropertyShape', 'rdf:langString'] : 'sh:PropertyShape',
+          'sh:path': { '@id': p.path },
+          'sh:name': { en: p.name },
+          'rdfs:label': labelMap(p.labels)
+        };
+        if (p.datatype) node['sh:datatype'] = p.datatype; // prefixed, expanded via @context
+        if (p.minCount) node['sh:minCount'] = p.minCount;
+        if (p.in) node['sh:in'] = p.in;
+        if (p.nodeKind) node['sh:nodeKind'] = p.nodeKind; // 'sh:IRI' → expanded
+        if (p.class) node['sh:class'] = { '@id': p.class };
+        return node;
+      })
     });
-  }
-  for (const s of shapes) {
-    for (const p of s.properties) {
-      const node = {
-        '@id': p.iri,
-        '@type': 'sh:PropertyShape',
-        'sh:path': { '@id': p.path },
-        'sh:name': p.name,
-        'rdfs:label': p.labels.map(l => ({ '@value': l.value, '@language': l.lang }))
-      };
-      if (p.datatype) node['sh:datatype'] = p.datatype; // prefixed form, expanded via @context
-      if (p.minCount) node['sh:minCount'] = p.minCount;
-      if (p.in) node['sh:in'] = { '@list': p.in.map(v => ({ '@value': v })) };
-      if (p.nodeKind) node['sh:nodeKind'] = { '@id': p.nodeKind };
-      if (p.class) node['sh:class'] = { '@id': p.class };
-      graph.push(node);
-    }
   }
   return { '@context': ctx, '@id': `${baseIri}shapes`, '@graph': graph };
 }
