@@ -34,8 +34,17 @@ module.exports = function (RED) {
       const mPkgFragment = p.match(/^\/apps\/([^/]+)\/fragment$/);
       const mPkgValidate = p.match(/^\/apps\/([^/]+)\/validate$/);
       const mTblValidate = p.match(/^\/apps\/([^/]+)\/([^/]+)\/validate$/);
+      const isPreview = p === '/shacl/preview';
       const isCoreShapes = p === '/shapes' || p === '/shapes/'; // '/shapes' contract, '/shapes/' index
       const isCoreFragment = p === '/fragment';
+      if (req.method === 'POST' && isPreview) {
+        handlePreview(req, res)
+          .catch(e => {
+            node.error(e.stack || e.message);
+            if (!res.headersSent) sendError(res, 500, 'InternalError', e.message);
+          });
+        return;
+      }
       if (req.method === 'POST' && (mPkgValidate || mTblValidate)) {
         const slug = (mPkgValidate || mTblValidate)[1];
         const table = mTblValidate ? mTblValidate[2] : null;
@@ -173,6 +182,33 @@ module.exports = function (RED) {
       }
       const report = validate(body, shapes, { tableShapeIri });
       return res.status(200).set('Content-Type', 'application/ld+json').json(report);
+    }
+
+    // POST /shacl/preview — compile a DRAFT fragment without persisting anything (écran 4 of the
+    // editor: live contract preview + diff + optional sample validation). Body:
+    // { fragment, slug? , publishedTables?, data? } → { hash, turtle, report? }
+    async function handlePreview(req, res) {
+      const { claims } = await claimsFromRequest(req, {
+        devTokens: node.devTokens, idpUserinfoUrl: node.idpUserinfoUrl
+      });
+      if (!claims) {
+        res.set('WWW-Authenticate', 'DPoP, Bearer');
+        return sendError(res, 401, 'Unauthorized', 'authentication required');
+      }
+      const body = await readJsonBody(req);
+      if (!body || !body.fragment || typeof body.fragment !== 'object') {
+        return sendError(res, 400, 'BadRequest', 'body must be { fragment, slug?, data? }');
+      }
+      const { compile } = require('./lib/compiler');
+      const compiled = compile({
+        fragment: body.fragment,
+        baseIri: node.baseIri,
+        slug: body.slug || null,
+        published: body.publishedTables ? new Set(body.publishedTables) : null
+      });
+      const out = { hash: compiled.hash, turtle: compiled.turtle };
+      if (body.data) out.report = validate(body.data, compiled.shapes);
+      return res.status(200).set('Content-Type', 'application/ld+json').json(out);
     }
 
     async function readJsonBody(req) {

@@ -19,7 +19,7 @@ const fragment = {
         immatriculation: { type: 'text', not_null: true, check_in: ['AA-111', 'BB-222'] },
         prix: { type: 'numeric' },
         description: { type: 'text', lang: true, align: 'dcterms:description' },
-        created_by: { type: 'bigint', fk: 'users' }
+        created_by: { type: 'bigint', fk: 'users', node_kind: 'iri' }
       }
     }
   }
@@ -37,7 +37,7 @@ function dataDoc(node) {
   return {
     '@context': { ex: NS, core: CORE_NS, dcterms: 'http://purl.org/dc/terms/' },
     '@id': BASE + 'apps/flotte/vehicules/1',
-    '@type': NS,
+    '@type': NS + 'Store_flotte_vehicules', // served @type = prefix:Camel(table)
     'ex:immatriculation': 'AA-111',
     'ex:prix': 10.5,
     'dcterms:description': { '@value': 'Camion benne', '@language': 'fr' },
@@ -47,10 +47,10 @@ function dataDoc(node) {
 
 test('C4: conformant data → sh:conforms true, empty results', () => {
   const doc = dataDoc();
-  doc['@graph'] = [doc, { '@id': BASE + 'users/7', '@type': CORE_NS, 'core:name': 'Alice' }];
+  doc['@graph'] = [doc, { '@id': BASE + 'users/7', '@type': CORE_NS + 'Users', 'core:name': 'Alice' }];
   delete doc['@id']; delete doc['@type']; // wrap: put the vehicle node in @graph too
   const vehicle = dataDoc();
-  const rep = validate({ '@context': doc['@context'], '@graph': [vehicle, { '@id': BASE + 'users/7', '@type': CORE_NS }] }, shapes);
+  const rep = validate({ '@context': doc['@context'], '@graph': [vehicle, { '@id': BASE + 'users/7', '@type': CORE_NS + 'Users' }] }, shapes);
   assert.strictEqual(rep['sh:conforms'], true);
   assert.strictEqual(rep['sh:result'].length, 0);
   assert.strictEqual(rep['@type'], 'sh:ValidationReport');
@@ -97,7 +97,7 @@ test('langString: plain literal on a lang field → datatype violation', () => {
 
 test('sh:class: FK pointing at a node of the wrong class → ClassConstraintComponent', () => {
   const vehicle = dataDoc();
-  const wrongUser = { '@id': BASE + 'users/7', '@type': NS }; // not the users class
+  const wrongUser = { '@id': BASE + 'users/7', '@type': NS + 'Store_flotte_vehicules' }; // not the users class
   const rep = validate({ '@context': { ex: NS, core: CORE_NS, dcterms: 'http://purl.org/dc/terms/' }, '@graph': [vehicle, wrongUser] }, shapes);
   assert.ok(rep['sh:result'].some(x => x['sh:sourceConstraintComponent']['@id'].endsWith('ClassConstraintComponent')));
 });

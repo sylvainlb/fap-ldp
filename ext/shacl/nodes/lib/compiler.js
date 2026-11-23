@@ -34,6 +34,7 @@ function expandIri(v) {
 const XSD = {
   text: 'xsd:string',
   bigint: 'xsd:integer',
+  'double precision': 'xsd:double', // core model.json dialect
   numeric: 'xsd:decimal',
   boolean: 'xsd:boolean',
   timestamptz: 'xsd:dateTime'
@@ -46,6 +47,42 @@ function esc(s) {
 
 function labelOf(labelI18n, fallback) {
   return (labelI18n && labelI18n.en) || fallback; // R1.1: pivot English
+}
+
+function camel(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// Core model.json dialect: fields are SQL-ish strings ("text not null",
+// "text default 'OPEN' check in ('OPEN','CLOSED')", "bigint fk users(id)", "bigserial").
+// E11 fragments (annexe A v0.4) use structured objects. normalizeField accepts both.
+function parseCoreField(def) {
+  if (typeof def !== 'string') return def; // already structured (annexe A)
+  let d = def.trim();
+  const out = {};
+  const chk = d.match(/^(.*?)\bcheck\s+in\s*\((.*)\)$/i);
+  if (chk) {
+    d = chk[1].trim();
+    out.check_in = chk[2].split(',').map(s => s.trim().replace(/^'|'$/g, '')).filter(Boolean);
+  }
+  const fk = d.match(/^(\S+)\s+\bfk\s+(\w+)\((\w+)\)$/i);
+  if (fk) { out.type = fk[1]; out.fk = fk[2]; }
+  else {
+    const dp = d.match(/^(double\s+precision)\b/i);
+    const defM = d.match(/^(\S+)\s+default\s+(.+)$/i);
+    if (dp) { out.type = 'double precision'; d = d.slice(dp[1].length).trim(); }
+    else if (defM) { out.type = defM[1]; d = defM[2].trim(); } // default: not compiled (R1.5)
+    else { out.type = d.split(/\s+/)[0]; d = d.split(/\s+/).slice(1).join(' '); }
+    if (/\bnot\s+null\b/i.test(d)) out.not_null = true;
+    if (/\bunique\b/i.test(d)) out.unique = true;
+    if (/\bbigserial\b/i.test(out.type)) { out.type = 'bigint'; out.serial = true; }
+  }
+  return out;
+}
+
+function normalizeTable(spec) {
+  // returns a table spec whose fields are all structured objects
+  const fields = {};
+  for (const [f, def] of Object.entries(spec.fields || {})) fields[f] = parseCoreField(def);
+  return { ...spec, fields };
 }
 
 function labelsOf(labelI18n) {
@@ -62,13 +99,15 @@ function compile(opts) {
   const shapes = [];
   for (const t of Object.keys(fragment.tables || {}).sort()) {
     if (published && !published.has(t)) continue; // F3.3/F3.4: unpublished tables have no contract
-    const table = fragment.tables[t];
+    const table = normalizeTable(fragment.tables[t]);
     const phys = slug ? `store_${slug}_${t}` : t;
     const ns = `${baseIri}ns/app/${phys}#`;
     const exclude = new Set([...SERVICE_FIELDS, ...(table.contract_exclude || [])]); // R1.4
     const shape = {
       iri: ns + 'Shape',
-      targetClass: table.align_class ? expandIri(table.align_class) : ns, // R1.3, default local class IRI
+      // R1.3 (rev 4.1): default class IRI matches the SERVED @type (jsonld.resourceDoc emits
+      // prefix:Camel(table) → ns#Camel(phys)); align_class overrides with a shared vocabulary
+      targetClass: table.align_class ? expandIri(table.align_class) : (ns + camel(phys)),
       name: labelOf(table.label_i18n, t),
       labels: labelsOf(table.label_i18n),
       properties: []
@@ -77,6 +116,11 @@ function compile(opts) {
       const fd = table.fields[f];
       if (exclude.has(f)) continue;
       if (fd.type === 'jsonb') continue; // F2.1: omitted in v1, documented in README non-mappings
+      // F2.1 (rev 4.1): a FK compiles to its served form (xsd:integer) unless the field is
+      // explicitly annotated node_kind: "iri" — then sh:nodeKind sh:IRI + sh:class on the
+      // target table's shape (core users shape for E11 packages; same-contract table for core)
+      const iriRef = fd.node_kind === 'iri';
+      const fkTarget = fd.fk ? (slug ? 'users' : fd.fk) : null; // E11: fk enum = users only (core table)
       const prop = {
         iri: ns + f + 'Property',
         path: fd.align ? expandIri(fd.align) : (ns + f), // R1.2: align wins, else local convention IRI
@@ -85,10 +129,8 @@ function compile(opts) {
         datatype: fd.lang === true ? 'rdf:langString' : XSD[fd.type], // F2.1
         minCount: fd.not_null ? 1 : null, // F2.1: not null → sh:minCount 1
         in: Array.isArray(fd.check_in) && fd.check_in.length ? fd.check_in.slice().sort() : null, // sh:in
-        nodeKind: (fd.node_kind === 'iri' || fd.fk) ? 'sh:IRI' : null, // F2.1
-        // F2.1: annexe A v0.3 fk enum = ["users"] only (inter-package FKs forbidden by E11),
-        // so sh:class always anchors on the core model contract's users shape (F3.4)
-        class: fd.fk === 'users' ? `${baseIri}ns/app/users#Shape` : null
+        nodeKind: iriRef ? 'sh:IRI' : null,
+        class: (iriRef && fkTarget) ? `${baseIri}ns/app/${fkTarget}#Shape` : null
       };
       shape.properties.push(prop);
     }

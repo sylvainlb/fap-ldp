@@ -21,7 +21,7 @@ const fragment = {
         type: { type: 'text', check_in: ['voiture', 'camion', 'velo'] },
         prix: { type: 'numeric' },
         actif: { type: 'boolean' },
-        created_by: { type: 'bigint', fk: 'users' },
+        created_by: { type: 'bigint', fk: 'users', node_kind: 'iri' },
         created_at: { type: 'timestamptz', default: 'now()' },
         updated_at: { type: 'timestamptz', default: 'now()' },
         deleted_at: { type: 'timestamptz' },
@@ -55,7 +55,7 @@ test('R1.2/R1.3 IRIs on PHYSICAL table name for packages (store_<slug>_<table>)'
   const { turtle } = compile({ fragment, baseIri: BASE, slug: 'flotte' });
   assert.match(turtle, /<https:\/\/pod\.example\/ns\/app\/store_flotte_vehicules#Shape>/);
   assert.match(turtle, /sh:path <https:\/\/pod\.example\/ns\/app\/store_flotte_vehicules#immatriculation>/);
-  assert.match(turtle, /sh:targetClass <https:\/\/pod\.example\/ns\/app\/store_flotte_vehicules#>/);
+  assert.match(turtle, /sh:targetClass <https:\/\/pod\.example\/ns\/app\/store_flotte_vehicules#Store_flotte_vehicules>/); // served @type = prefix:Camel(table)
   assert.doesNotMatch(turtle, /ns\/app\/vehicules#/); // logical name never used for IRIs
 });
 
@@ -63,6 +63,7 @@ test('R1.2 core model: physical = table name', () => {
   const core = { tables: { tickets: { pk: 'id', fields: { id: { type: 'bigint', serial: true }, status: { type: 'text' } } } } };
   const { turtle } = compile({ fragment: core, baseIri: BASE, slug: null });
   assert.match(turtle, /<https:\/\/pod\.example\/ns\/app\/tickets#Shape>/);
+  assert.match(turtle, /sh:targetClass <https:\/\/pod\.example\/ns\/app\/tickets#Tickets>/);
   assert.match(turtle, /sh:path <https:\/\/pod\.example\/ns\/app\/tickets#status>/);
 });
 

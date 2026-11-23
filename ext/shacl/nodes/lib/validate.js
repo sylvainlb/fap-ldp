@@ -27,7 +27,7 @@ function prefixMap(doc) {
 function expand(term, map) {
   if (typeof term !== 'string') return null;
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(term)) return term; // already an IRI
-  const m = term.match(/^([a-z][a-z0-9]*):(.+)$/i);
+  const m = term.match(/^([A-Za-z][A-Za-z0-9_]*):(.+)$/); // prefix names may contain _ (app_tickets, app_store_flotte_vehicules)
   if (m && map[m[1].toLowerCase()]) return map[m[1].toLowerCase()] + m[2];
   return null; // keyword or unmapped term — not a property IRI
 }
@@ -45,10 +45,12 @@ function toNodes(doc) {
     return byId.get(id);
   }
   function addValue(node, piri, v) {
+    if (v === null || v === undefined) return; // JSON-LD null = property absent (SQL NULL)
     if (!node.props.has(piri)) node.props.set(piri, []);
     node.props.get(piri).push(v);
   }
   function readValue(v) {
+    if (v === null || v === undefined) return null;
     if (v && typeof v === 'object' && !Array.isArray(v)) {
       if (v['@id']) return { kind: 'iri', iri: v['@id'] };
       return {
@@ -84,7 +86,7 @@ const ISO_DT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
 // the compiler emits datatypes in prefixed form (xsd:string, rdf:langString) — expand for comparison
 const DT_PREFIXES = { xsd: XSD, rdf: RDF, sh: SH, rdfs: 'http://www.w3.org/2000/01/rdf-schema#' };
 function expandDt(dt) {
-  const m = String(dt).match(/^([a-z]+):(.+)$/i);
+  const m = String(dt).match(/^([A-Za-z][A-Za-z0-9_]*):(.+)$/);
   if (m && DT_PREFIXES[m[1].toLowerCase()]) return DT_PREFIXES[m[1].toLowerCase()] + m[2];
   return dt;
 }
