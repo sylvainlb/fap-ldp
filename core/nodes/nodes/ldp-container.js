@@ -59,6 +59,7 @@ module.exports = function (RED) {
       // (meta, shapes, validate, fragment) are rejected at injection time (annexe A v0.4).
       if (/^\/shapes\/?$/.test(req.path)
           || /^\/fragment$/.test(req.path)
+          || /^\/shacl\/preview$/.test(req.path)
           || /^\/apps\/[^/]+\/(shapes|validate|fragment)$/.test(req.path)
           || /^\/apps\/[^/]+\/[^/]+\/validate$/.test(req.path)) return next();
       handle(req, res).catch(e => {
