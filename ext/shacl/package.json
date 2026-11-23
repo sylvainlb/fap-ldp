@@ -1,0 +1,16 @@
+{
+  "name": "node-red-contrib-fap-ldp-shacl",
+  "version": "0.1.0",
+  "description": "FAP-LDP ext E5 shacl (spec app-shape-editor.md rev 4): compiled SHACL contracts from model fragments (E11) and the core model.json — published read-only, external validation only; the SQL write path is untouched",
+  "license": "UNLICENSED",
+  "node-red": {
+    "version": ">=3.0",
+    "nodes": {
+      "fap-ldp-shacl-serve": "nodes/shacl-serve.js",
+      "fap-ldp-shacl-boot": "nodes/shacl-boot.js"
+    }
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
+}
