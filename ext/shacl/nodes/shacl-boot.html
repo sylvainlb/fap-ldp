@@ -1,0 +1,24 @@
+<script type="text/javascript">
+  RED.nodes.registerType('fap-ldp-shacl-boot', {
+    category: 'FAP-LDP',
+    color: '#a6bbcf',
+    defaults: {
+      name: { value: '' },
+      baseIri: { value: 'http://localhost:1880/' },
+      modelPath: { value: '/config/model.json' },
+      pgDsn: { value: '' },
+      pgHost: { value: '127.0.0.1' }, pgPort: { value: '5432' },
+      pgDatabase: { value: 'postgres' }, pgUser: { value: 'app' }, pgPassword: { value: '' },
+      pgPoolMax: { value: '2' }
+    },
+    inputs: 0,
+    outputs: 0,
+    icon: 'shacl.png',
+    label: function () { return this.name || 'shacl boot (prewarm + LISTEN fap_revoked)'; }
+  });
+</script>
+<script type="text/html" data-help-name="fap-ldp-shacl-boot">
+  <p>ext/shacl boot node: prewarms the compiled contracts of published sources (F3.1, C7) and
+  listens on <code>fap_revoked</code> to drop the compiled-contract cache on revocation (C2).
+  Compilation is lazy: the first GET compiles and caches by fragment_hash.</p>
+</script>

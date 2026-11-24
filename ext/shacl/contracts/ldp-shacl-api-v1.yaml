@@ -1,0 +1,31 @@
+# ldp-shacl-api v1 — routes served by ext/shacl, reserved in the core by the A.2 route patch
+# (spec app-shape-editor.md rev 4). Read-only publication of compiled SHACL contracts + fragment
+# views; the write path is untouched (SQL-only). Validation endpoints (J3) extend this contract
+# as v1.1 (additive: POST /apps/<slug>/validate, POST /apps/<slug>/<table>/validate).
+apiVersion: fap.facis/contracts/v1
+kind: ExtContracts
+metadata:
+  name: ldp-shacl-api
+  version: "1.0"
+spec:
+  routes:
+    - method: GET
+      path: /shapes
+      summary: "SHACL contract of the core model (model.json). Turtle default, JSON-LD on Accept. ETag W/\"<sha256 of canonical Turtle>\", If-None-Match → 304. Auth: any authenticated pod user."
+    - method: GET
+      path: /shapes/
+      summary: "Index of sources (core + packages, all states): slug, version, state, contractUri, fragmentUri, fragmentHash, supersedes. JSON-LD."
+    - method: GET
+      path: /fragment
+      summary: "Core model.json (source of truth, read-only) + fragmentHash."
+    - method: GET
+      path: /apps/<slug>/shapes
+      summary: "SHACL contract of a package, published tables only (dsp.asset_mapping). 404 unknown slug / no published table, 410 revoked. ETag as /shapes."
+    - method: GET
+      path: /apps/<slug>/fragment
+      summary: "Raw model_fragment + fragment_hash + state + supersedes. 404 unknown, 410 revoked."
+  invariants:
+    - "Contracts are compiled lazily from the stored fragment/model.json, cached by fragment hash; never editable (F3.1)."
+    - "IRIs computed on the physical PG table name (R1.2); never sh:closed (F2.5)."
+    - "Package revoked → contract gone (410) and cache dropped on pg_notify fap_revoked (C2)."
+    - "No write endpoint in this ext; no core or E11 behavior modified (C5)."
