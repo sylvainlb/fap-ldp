@@ -11,6 +11,7 @@
 const { createPool } = require('./lib/pgpool-lite');
 const { claimsFromRequest } = require('./lib/auth');
 const { createStore } = require('./lib/store');
+const { validate } = require('./lib/validate');
 
 module.exports = function (RED) {
   function ShaclServeNode(config) {
@@ -31,9 +32,30 @@ module.exports = function (RED) {
       const p = req.path;
       const mPkgShapes = p.match(/^\/apps\/([^/]+)\/shapes$/);
       const mPkgFragment = p.match(/^\/apps\/([^/]+)\/fragment$/);
+      const mPkgValidate = p.match(/^\/apps\/([^/]+)\/validate$/);
+      const mTblValidate = p.match(/^\/apps\/([^/]+)\/([^/]+)\/validate$/);
+      const isPreview = p === '/shacl/preview';
       const isCoreShapes = p === '/shapes' || p === '/shapes/'; // '/shapes' contract, '/shapes/' index
       const isCoreFragment = p === '/fragment';
-      if (req.method !== 'GET' && req.method !== 'HEAD') return next(); // POST validate = J3
+      if (req.method === 'POST' && isPreview) {
+        handlePreview(req, res)
+          .catch(e => {
+            node.error(e.stack || e.message);
+            if (!res.headersSent) sendError(res, 500, 'InternalError', e.message);
+          });
+        return;
+      }
+      if (req.method === 'POST' && (mPkgValidate || mTblValidate)) {
+        const slug = (mPkgValidate || mTblValidate)[1];
+        const table = mTblValidate ? mTblValidate[2] : null;
+        handleValidate(req, res, slug, table)
+          .catch(e => {
+            node.error(e.stack || e.message);
+            if (!res.headersSent) sendError(res, 500, 'InternalError', e.message);
+          });
+        return;
+      }
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
       if (!mPkgShapes && !mPkgFragment && !isCoreShapes && !isCoreFragment) return next();
       handle(req, res, { mPkgShapes, mPkgFragment, isCoreShapes, isCoreFragment })
         .catch(e => {
@@ -53,9 +75,13 @@ module.exports = function (RED) {
       });
     }
 
-    function wantsJsonLd(req) {
+    // Content negotiation (F3.2): Turtle when explicitly requested, JSON-LD otherwise —
+    // chantier 3 (app-ui-editor) fetches the contract with a plain res.json().
+    function wantsTurtle(req) {
       const a = String(req.headers.accept || '');
-      return /ld\+json|application\/json/.test(a) && !/text\/turtle/.test(a);
+      if (!a || a === '*/*') return false; // default → JSON-LD (chantier 3 reader)
+      if (/text\/turtle/.test(a) && !/json/.test(a)) return true;
+      return false;
     }
 
     function sendContract(req, res, compiled, uri) {
@@ -64,7 +90,7 @@ module.exports = function (RED) {
         return res.status(304).set('ETag', etag).end();
       }
       res.set('ETag', etag).set('Cache-Control', 'no-cache');
-      if (wantsJsonLd(req)) {
+      if (!wantsTurtle(req)) {
         return res.status(200).set('Content-Type', 'application/ld+json').json(compiled.jsonld);
       }
       res.status(200)
@@ -125,6 +151,82 @@ module.exports = function (RED) {
         return sendError(res, 404, 'NotFound', `package "${slug}" exposes no contract (no published table)`);
       }
       return sendContract(req, res, compiled, `${node.baseIri}apps/${slug}/shapes`);
+    }
+
+    // POST /apps/<slug>/validate (+ /<table>/validate) — F4.1: RDF body in, W3C report out.
+    // Read-only: no write, no authority on the internal path. When the fragment carries a FK
+    // toward users, both graphs are loaded: package contract + core contract (F4.1).
+    async function handleValidate(req, res, slug, table) {
+      const { claims } = await claimsFromRequest(req, {
+        devTokens: node.devTokens, idpUserinfoUrl: node.idpUserinfoUrl
+      });
+      if (!claims) {
+        res.set('WWW-Authenticate', 'DPoP, Bearer');
+        return sendError(res, 401, 'Unauthorized', 'authentication required');
+      }
+      const body = await readJsonBody(req);
+      if (!body || typeof body !== 'object') {
+        return sendError(res, 400, 'BadRequest', 'body must be an RDF/JSON-LD document');
+      }
+      const pkg = await store.loadPackage(slug);
+      if (!pkg) return sendError(res, 404, 'NotFound', `unknown package "${slug}"`);
+      if (pkg.state === 'revoked') return sendError(res, 410, 'Gone', `package "${slug}" is revoked`);
+      const compiled = await store.contract(slug, node.baseIri);
+      if (!compiled) return sendError(res, 404, 'NotFound', `package "${slug}" exposes no contract (no published table)`);
+
+      let shapes = compiled.shapes;
+      const needsCore = shapes.some(s => s.properties.some(p => p.class));
+      if (needsCore) {
+        const core = await store.contract('core', node.baseIri);
+        if (core) shapes = [...core.shapes, ...shapes];
+      }
+      const tableShapeIri = table ? `${node.baseIri}ns/app/store_${slug}_${table}#Shape` : null;
+      if (table && !shapes.some(s => s.iri === tableShapeIri)) {
+        return sendError(res, 404, 'NotFound', `no published table "${table}" in package "${slug}"`);
+      }
+      const report = validate(body, shapes, { tableShapeIri });
+      return res.status(200).set('Content-Type', 'application/ld+json').json(report);
+    }
+
+    // POST /shacl/preview — compile a DRAFT fragment without persisting anything (écran 4 of the
+    // editor: live contract preview + diff + optional sample validation). Body:
+    // { fragment, slug? , publishedTables?, data? } → { hash, turtle, report? }
+    async function handlePreview(req, res) {
+      const { claims } = await claimsFromRequest(req, {
+        devTokens: node.devTokens, idpUserinfoUrl: node.idpUserinfoUrl
+      });
+      if (!claims) {
+        res.set('WWW-Authenticate', 'DPoP, Bearer');
+        return sendError(res, 401, 'Unauthorized', 'authentication required');
+      }
+      const body = await readJsonBody(req);
+      if (!body || !body.fragment || typeof body.fragment !== 'object') {
+        return sendError(res, 400, 'BadRequest', 'body must be { fragment, slug?, data? }');
+      }
+      const { compile } = require('./lib/compiler');
+      const compiled = compile({
+        fragment: body.fragment,
+        baseIri: node.baseIri,
+        slug: body.slug || null,
+        published: body.publishedTables ? new Set(body.publishedTables) : null
+      });
+      const out = { hash: compiled.hash, turtle: compiled.turtle };
+      if (body.data) out.report = validate(body.data, compiled.shapes);
+      return res.status(200).set('Content-Type', 'application/ld+json').json(out);
+    }
+
+    async function readJsonBody(req) {
+      if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) return req.body;
+      let raw = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : String(req.body || '');
+      if (!raw) {
+        await new Promise((ok, ko) => {
+          let acc = '';
+          req.on('data', c => { acc += c; });
+          req.on('end', () => { raw = acc; ok(); });
+          req.on('error', ko);
+        });
+      }
+      try { return raw ? JSON.parse(raw) : null; } catch { return null; }
     }
   }
 

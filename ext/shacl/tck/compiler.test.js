@@ -21,7 +21,7 @@ const fragment = {
         type: { type: 'text', check_in: ['voiture', 'camion', 'velo'] },
         prix: { type: 'numeric' },
         actif: { type: 'boolean' },
-        created_by: { type: 'bigint', fk: 'users' },
+        created_by: { type: 'bigint', fk: 'users', node_kind: 'iri' },
         created_at: { type: 'timestamptz', default: 'now()' },
         updated_at: { type: 'timestamptz', default: 'now()' },
         deleted_at: { type: 'timestamptz' },
@@ -46,7 +46,7 @@ test('F2.1 type mappings + not_null + check_in + fk anchor + node_kind + lang', 
   assert.match(turtle, /sh:minCount 1/);               // not_null
   assert.match(turtle, /sh:in \( "camion" "velo" "voiture" \)/); // check_in, sorted → canonical
   assert.match(turtle, /sh:nodeKind sh:IRI/);          // node_kind: iri + fk
-  assert.match(turtle, /sh:class <https:\/\/pod\.example\/ns\/app\/users#Shape>/); // fk users → core contract
+  assert.match(turtle, /sh:class <https:\/\/pod\.example\/ns\/app\/users#>/); // fk users → core contract
   assert.match(turtle, /sh:datatype rdf:langString/);  // lang: true
   assert.match(turtle, /sh:path <http:\/\/purl\.org\/dc\/terms\/description>/); // align prefix expanded
 });
@@ -55,7 +55,7 @@ test('R1.2/R1.3 IRIs on PHYSICAL table name for packages (store_<slug>_<table>)'
   const { turtle } = compile({ fragment, baseIri: BASE, slug: 'flotte' });
   assert.match(turtle, /<https:\/\/pod\.example\/ns\/app\/store_flotte_vehicules#Shape>/);
   assert.match(turtle, /sh:path <https:\/\/pod\.example\/ns\/app\/store_flotte_vehicules#immatriculation>/);
-  assert.match(turtle, /sh:targetClass <https:\/\/pod\.example\/ns\/app\/store_flotte_vehicules#>/);
+  assert.match(turtle, /sh:targetClass <https:\/\/pod\.example\/ns\/app\/store_flotte_vehicules#>/); // served @type = prefix:Camel(table)
   assert.doesNotMatch(turtle, /ns\/app\/vehicules#/); // logical name never used for IRIs
 });
 
@@ -63,6 +63,7 @@ test('R1.2 core model: physical = table name', () => {
   const core = { tables: { tickets: { pk: 'id', fields: { id: { type: 'bigint', serial: true }, status: { type: 'text' } } } } };
   const { turtle } = compile({ fragment: core, baseIri: BASE, slug: null });
   assert.match(turtle, /<https:\/\/pod\.example\/ns\/app\/tickets#Shape>/);
+  assert.match(turtle, /sh:targetClass <https:\/\/pod\.example\/ns\/app\/tickets#>/);
   assert.match(turtle, /sh:path <https:\/\/pod\.example\/ns\/app\/tickets#status>/);
 });
 
@@ -122,7 +123,9 @@ test('JSON-LD serialization is offered and deterministic', () => {
   const b = compile({ fragment, baseIri: BASE, slug: 'flotte' });
   assert.strictEqual(JSON.stringify(a.jsonld), JSON.stringify(b.jsonld));
   assert.ok(Array.isArray(a.jsonld['@graph']));
-  const ps = a.jsonld['@graph'].find(n => n['@type'] === 'sh:PropertyShape' && n['sh:path']['@id'].endsWith('#immatriculation'));
+  // chantier 3 form: property shapes are INLINE in sh:property
+  const shape = a.jsonld['@graph'].find(n => n['@type'] === 'sh:NodeShape' && n['sh:targetClass']['@id'].includes('vehicules'));
+  const ps = shape['sh:property'].find(n => n['sh:path']['@id'].endsWith('#immatriculation'));
   assert.strictEqual(ps['sh:datatype'], 'xsd:string');
   assert.strictEqual(ps['sh:minCount'], 1);
 });

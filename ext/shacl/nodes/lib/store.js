@@ -99,21 +99,17 @@ function createStore({ pool, modelPath }) {
   async function index(baseIri) {
     const pub = await publishedMaps();
     const core = loadCoreModel();
-    const sources = [{
-      kind: 'core', slug: null, contractUri: `${baseIri}shapes`,
-      fragmentHash: core.rawHash,
-      published: pub.core.size > 0
-    }];
+    const sources = [indexEntry({
+      kind: 'core', slug: null, version: null, state: 'installed',
+      fragmentHash: core.rawHash, supersedes: null, hasContract: pub.core.size > 0
+    }, baseIri)];
     for (const p of await listPackages()) {
       const hasContract = p.state !== 'revoked' && (pub.pkgs.get(p.slug) || new Set()).size > 0;
-      sources.push({
+      sources.push(indexEntry({
         kind: 'package', slug: p.slug, version: p.version, state: p.state,
-        contractUri: hasContract ? `${baseIri}apps/${p.slug}/shapes` : null,
-        fragmentUri: `${baseIri}apps/${p.slug}/fragment`,
-        fragmentHash: p.fragment_hash,
-        supersedes: (p.model_fragment && p.model_fragment.supersedes) || null,
-        published: hasContract
-      });
+        fragmentHash: p.fragment_hash, supersedes: (p.model_fragment && p.model_fragment.supersedes) || null,
+        hasContract
+      }, baseIri));
     }
     return { sources };
   }
@@ -125,4 +121,25 @@ function createStore({ pool, modelPath }) {
   };
 }
 
-module.exports = { createStore };
+// Pure index entry — chantier 3 (app-ui-editor/src/editor.js) reads `sources[]` with
+// `contract` (URL) and `package` ('/apps/<slug>/meta'); F3.6 fields (contractUri, state,
+// fragmentHash, supersedes…) are kept alongside for the model editor.
+function indexEntry(s, baseIri) {
+  const isCore = s.kind === 'core';
+  const contract = s.hasContract ? (isCore ? `${baseIri}shapes` : `${baseIri}apps/${s.slug}/shapes`) : null;
+  return {
+    kind: s.kind,
+    slug: s.slug,
+    version: s.version,
+    state: s.state,
+    contract,                                   // chantier 3 primary field
+    package: isCore ? null : `/apps/${s.slug}/meta`, // chantier 3 fallback derivation
+    contractUri: contract,
+    fragmentUri: isCore ? `${baseIri}fragment` : `${baseIri}apps/${s.slug}/fragment`,
+    fragmentHash: s.fragmentHash,
+    supersedes: s.supersedes,
+    published: s.hasContract
+  };
+}
+
+module.exports = { createStore, indexEntry };
