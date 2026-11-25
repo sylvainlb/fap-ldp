@@ -1,0 +1,35 @@
+[
+ {
+  "id": "shacl-tab",
+  "type": "tab",
+  "label": "E5 shacl (contrats publiés)",
+  "disabled": false,
+  "info": ""
+ },
+ {
+  "id": "shacl-serve",
+  "type": "fap-ldp-shacl-serve",
+  "z": "shacl-tab",
+  "name": "shacl serve (GET /shapes, /apps/<slug>/shapes|fragment, POST .../validate)",
+  "baseIri": "${FAP_LDP_BASE_IRI}",
+  "pgDsn": "${PG_APP_DSN}",
+  "pgPoolMax": "2",
+  "idpUserinfoUrl": "${IDP_USERINFO_URL}",
+  "devTokens": "{}",
+  "x": 140,
+  "y": 120,
+  "wires": []
+ },
+ {
+  "id": "shacl-boot",
+  "type": "fap-ldp-shacl-boot",
+  "z": "shacl-tab",
+  "name": "shacl boot (prewarm contrats + pg_notify fap_revoked)",
+  "baseIri": "${FAP_LDP_BASE_IRI}",
+  "pgDsn": "${PG_ADMIN_DSN}",
+  "pgPoolMax": "2",
+  "x": 380,
+  "y": 120,
+  "wires": []
+ }
+]
