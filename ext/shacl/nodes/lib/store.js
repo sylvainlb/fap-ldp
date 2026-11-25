@@ -101,21 +101,77 @@ function createStore({ pool, modelPath }) {
     const core = loadCoreModel();
     const sources = [indexEntry({
       kind: 'core', slug: null, version: null, state: 'installed',
-      fragmentHash: core.rawHash, supersedes: null, hasContract: pub.core.size > 0
+      fragmentHash: core.rawHash, supersedes: null, hasContract: pub.core.size > 0,
+      tables: tablesFromFragment(core.model, null, baseIri, pub.core, 'core:' + core.rawHash + ':reg')
     }, baseIri)];
     for (const p of await listPackages()) {
       const hasContract = p.state !== 'revoked' && (pub.pkgs.get(p.slug) || new Set()).size > 0;
       sources.push(indexEntry({
         kind: 'package', slug: p.slug, version: p.version, state: p.state,
         fragmentHash: p.fragment_hash, supersedes: (p.model_fragment && p.model_fragment.supersedes) || null,
-        hasContract
+        hasContract,
+        tables: p.state === 'revoked' ? [] : tablesFromFragment(p.model_fragment, p.slug, baseIri, pub.pkgs.get(p.slug) || new Set(), `pkg:${p.slug}:${p.fragment_hash}:reg`)
       }, baseIri));
     }
     return { sources };
   }
 
+  // Registre des objets (chantier 3 rev 8): TOUTES les tables du modèle — publiées ou non —
+  // chacune avec son flag published : 1 shape = 1 objet = 1 entrée. Le contrat publié
+  // (contract()) ne garde que les tables publiées (R1.4/F3.3) ; le registre liste tout.
+  function tablesFromFragment(fragment, slug, baseIri, publishedSet, cacheKey) {
+    if (cache.has(cacheKey)) return cache.get(cacheKey);
+    // compile SANS filtre published → toutes les shapes
+    const full = compile({ fragment, baseIri, slug, published: null });
+    const toMap = (labels, fallback) => {
+      const m = {};
+      for (const l of labels ?? []) m[l.lang ?? 'en'] = l.value;
+      if (!Object.keys(m).length) m.en = (typeof fallback === 'object' ? fallback?.en : fallback) ?? '';
+      return m;
+    };
+    const tables = full.shapes.map((sh) => {
+      const phys = sh.iri.split('/ns/app/').pop()?.replace(/#.*$/, '') ?? sh.iri;
+      const logical = slug ? phys.replace(`store_${slug}_`, '') : phys;
+      return {
+        table: logical,
+        phys,                                        // R1.2: physical PG name
+        label: toMap(sh.labels, sh.name),            // localized map { en, fr? }
+        published: publishedSet.has(logical),
+        count: sh.properties.length,                 // number of contract fields
+        fields: sh.properties.map((p) => toMap(p.labels, p.name)), // localized field labels
+      };
+    });
+    cache.set(cacheKey, tables);
+    return tables;
+  }
+
+  async function registryOf(kind, baseIri) {
+    const pub = await publishedMaps();
+    if (kind === 'core') {
+      const { model, rawHash } = loadCoreModel();
+      return tablesFromFragment(model, null, baseIri, pub.core, 'core:' + rawHash + ':reg');
+    }
+    const pkg = await loadPackage(kind);
+    if (!pkg || pkg.state === 'revoked') return null;
+    return tablesFromFragment(pkg.model_fragment, kind, baseIri, pub.pkgs.get(kind) || new Set(), `pkg:${kind}:${pkg.fragment_hash}:reg`);
+  }
+
+  // Shape unique d'un objet : GET /shapes/<table> (core) / /apps/<slug>/shapes/<table> —
+  // chantier 3 rev 8 : la shape en JSON-LD avec reg:published embarqué (null → 404).
+  async function shapeOf(kind, table, baseIri) {
+    const reg = await registryOf(kind, baseIri);
+    const hit = reg?.find((t) => t.table === table || t.phys === table);
+    if (!hit) return null;
+    const fragment = kind === 'core' ? loadCoreModel().model : (await loadPackage(kind)).model_fragment;
+    const full = compile({ fragment, baseIri, slug: kind === 'core' ? null : kind, published: null });
+    const shape = full.shapes.find((sh) => sh.iri.endsWith(`/ns/app/${hit.phys}#Shape`));
+    if (!shape) return null;
+    const node = full.jsonld['@graph'].find((n) => n['@id'] === shape.iri);
+    return node ? { ...node, 'reg:published': hit.published } : null;
+  }
+
   return {
-    contract, fragmentOf, index, publishedMaps, loadPackage, listPackages,
+    contract, fragmentOf, index, registryOf, shapeOf, publishedMaps, loadPackage, listPackages,
     clearCache: () => cache.clear(),
     cacheSize: () => cache.size
   };
@@ -138,7 +194,8 @@ function indexEntry(s, baseIri) {
     fragmentUri: isCore ? `${baseIri}fragment` : `${baseIri}apps/${s.slug}/fragment`,
     fragmentHash: s.fragmentHash,
     supersedes: s.supersedes,
-    published: s.hasContract
+    published: s.hasContract,
+    tables: s.tables ?? []                      // chantier 3 rev 8: registre des objets (all tables + flag published)
   };
 }
 

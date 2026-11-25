@@ -2,9 +2,12 @@
 // Serves the published SHACL contracts and the read-only fragment views. The routes are
 // reserved for this ext by the core route patch (A.2):
 //   GET /shapes                     → core model contract (Turtle, JSON-LD admitted) + ETag  (F3.2/F3.4)
-//   GET /shapes/                    → index of all sources (core + packages, all states)     (F3.6)
+//   GET /shapes/                    → index of all sources (core + packages, all states), each
+//                                     with tables[] = registry of objects (all tables + flag) (F3.6, ch.3 rev 8)
+//   GET /shapes/<table>             → single object shape, JSON-LD, reg:published embedded, 404 unknown
 //   GET /fragment                   → core model.json + hash                                 (F3.5)
 //   GET /apps/<slug>/shapes         → package contract (published tables only) + ETag        (F3.2/F3.3)
+//   GET /apps/<slug>/shapes/<table> → single object shape of a package (reg:published, 404)   (ch.3 rev 8)
 //   GET /apps/<slug>/fragment       → raw fragment + fragment_hash + state + supersedes     (F3.5)
 // Read = any authenticated pod user (same as GET /apps/ in E11). No write path here:
 // the write path stays SQL-only (spec §1); validation endpoints land in J3 (POST .../validate).
@@ -31,6 +34,8 @@ module.exports = function (RED) {
     RED.httpNode.use((req, res, next) => {
       const p = req.path;
       const mPkgShapes = p.match(/^\/apps\/([^/]+)\/shapes$/);
+      const mPkgShape = p.match(/^\/apps\/([^/]+)\/shapes\/([^/]+)$/);
+      const mCoreShape = p.match(/^\/shapes\/([^/]+)$/);
       const mPkgFragment = p.match(/^\/apps\/([^/]+)\/fragment$/);
       const mPkgValidate = p.match(/^\/apps\/([^/]+)\/validate$/);
       const mTblValidate = p.match(/^\/apps\/([^/]+)\/([^/]+)\/validate$/);
@@ -56,8 +61,8 @@ module.exports = function (RED) {
         return;
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-      if (!mPkgShapes && !mPkgFragment && !isCoreShapes && !isCoreFragment) return next();
-      handle(req, res, { mPkgShapes, mPkgFragment, isCoreShapes, isCoreFragment })
+      if (!mPkgShapes && !mPkgFragment && !isCoreShapes && !isCoreFragment && !mPkgShape && !mCoreShape) return next();
+      handle(req, res, { mPkgShapes, mPkgShape, mCoreShape, mPkgFragment, isCoreShapes, isCoreFragment })
         .catch(e => {
           node.error(e.stack || e.message);
           if (!res.headersSent) sendError(res, 500, 'InternalError', e.message);
@@ -128,6 +133,30 @@ module.exports = function (RED) {
         const f = await store.fragmentOf('core');
         return res.status(200).set('Content-Type', 'application/json').json({
           kind: 'core', fragmentHash: f.fragmentHash, model: f.model
+        });
+      }
+
+      // GET /shapes/<table> (core) / GET /apps/<slug>/shapes/<table> (package) — chantier 3 rev 8:
+      // 1 shape = 1 JSON = 1 object type, with reg:published embedded; 404 unknown table.
+      if (route.mCoreShape || route.mPkgShape) {
+        const kind = route.mCoreShape ? 'core' : route.mPkgShape[1];
+        const table = route.mCoreShape ? route.mCoreShape[1] : route.mPkgShape[2];
+        const shape = await store.shapeOf(kind, table, node.baseIri);
+        if (!shape) {
+          if (kind !== 'core') {
+            const pkg = await store.loadPackage(kind);
+            if (pkg && pkg.state === 'revoked') return sendError(res, 410, 'Gone', `package "${kind}" is revoked`);
+          }
+          return sendError(res, 404, 'NotFound', `unknown object "${table}"`);
+        }
+        return res.status(200).set('Content-Type', 'application/ld+json').json({
+          '@context': {
+            sh: 'http://www.w3.org/ns/shacl#',
+            rdfs: 'http://www.w3.org/2000/01/rdf-schema#',
+            xsd: 'http://www.w3.org/2001/XMLSchema#',
+            reg: `${node.baseIri}ns/reg#`
+          },
+          ...shape
         });
       }
 

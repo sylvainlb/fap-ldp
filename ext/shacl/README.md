@@ -18,9 +18,11 @@ write authority — this ext adds **no** constraint to it and modifies **no** co
 | Route | Content |
 |---|---|
 | `GET /shapes` | Core model contract — Turtle (JSON-LD on Accept), `ETag W/"<sha256>"`, 304 on If-None-Match (F3.2/F3.4) |
-| `GET /shapes/` | Index of all sources: core + packages, all states, contract/fragment URIs, hashes, `supersedes` (F3.6) |
+| `GET /shapes/` | Index of all sources: core + packages, all states, contract/fragment URIs, hashes, `supersedes` (F3.6) — each source also carries **`tables[]`**: the object registry, ALL tables of the model with `{ table, phys, label (locale map), published, count, fields[] }` (chantier 3 rev 8; revoked packages get `tables: []`) |
+| `GET /shapes/<table>` | Single object shape (core), JSON-LD, `reg:published` embedded, 404 unknown table (chantier 3 rev 8) |
 | `GET /fragment` | Core `model.json` + hash (F3.5) |
 | `GET /apps/<slug>/shapes` | Package contract, **published tables only** (`dsp.asset_mapping`) — 404 no published table, 410 revoked (F3.3) |
+| `GET /apps/<slug>/shapes/<table>` | Single object shape of a package, JSON-LD, `reg:published`, 404/410 (chantier 3 rev 8) |
 | `GET /apps/<slug>/fragment` | Raw `model_fragment` + `fragment_hash` + state + `supersedes` (F3.5) |
 | `POST /apps/<slug>/validate`, `POST /apps/<slug>/<table>/validate` | **J3**: validate an RDF/JSON-LD data graph against the contract; W3C `sh:ValidationReport` out, read-only (F4.1/C4) |
 
@@ -64,4 +66,17 @@ documented expectation F5.2 ("governed", not "incoherent").
   `meta|shapes|validate|fragment`) — transverse agreement with the DSL spec owner. Until then,
   fragments carrying those keys are rejected `422 schema_violation` by E11; the compiler already
   handles them defensively.
-- **A.2**: core route reservation patch (`feat/a2-core-reserve-shacl-routes`).
+- **A.2**: core route reservation patch (`feat/a2-core-reserve-shacl-routes`) — covers
+  `/shapes`, `/shapes/`, `/shapes/<table>`, `/fragment`, `/shacl/preview`,
+  `/apps/<slug>/{shapes,shapes/<table>,validate,fragment}` and `/apps/<slug>/<table>/validate`.
+
+## Déploiement (ORCE)
+
+- Package monté read-only : `../../fap-ldp/ext/shacl:/data/node_modules/node-red-contrib-fap-ldp-shacl:ro`
+  (compose `app-supervision-backend/compose/docker-compose.yml`).
+- Nœuds dans les flows seed : fragment `compose/flows/shacl.json`, assemblé par
+  `app-supervision-backend/scripts/assemble-flows.sh` → `.build/flows.json` (monté `/flows-app`,
+  recopié vers `/data/flows.json` à chaque boot par `orce-entrypoint.sh`).
+- Les deux nœuds **doivent avoir un bloc `<script type="text/html" data-template-name="…">`** dans leur
+  `.html` : c'est ce bloc qui enregistre le type dans la palette (sans lui, le module est scanné mais
+  ses types restent invisibles et les nœuds des flows sont supprimés au boot).

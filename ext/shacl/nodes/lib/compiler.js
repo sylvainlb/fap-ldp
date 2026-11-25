@@ -141,7 +141,10 @@ function compile(opts) {
   }
   const turtle = toTurtle(shapes);
   const hash = crypto.createHash('sha256').update(turtle, 'utf8').digest('hex'); // F2.3
-  return { turtle, hash, shapes, jsonld: toJsonLd(shapes, baseIri) };
+  // the compiled graph carries the @id of ITS OWN contract (core /shapes, package
+  // /apps/<slug>/shapes) — a package contract must not claim the core contract IRI
+  const contractIri = slug ? `${baseIri}apps/${slug}/shapes` : `${baseIri}shapes`;
+  return { turtle, hash, shapes, jsonld: toJsonLd(shapes, contractIri) };
 }
 
 function toTurtle(shapes) {
@@ -185,7 +188,7 @@ function toTurtle(shapes) {
 // - sh:in = plain array of strings ; sh:datatype / sh:nodeKind = prefixed forms (expanded via @context)
 // - sh:targetClass / sh:class = full IRIs, class form = namespace with trailing '#'
 // - lang fields: sh:datatype rdf:langString AND @type rdf:langString (contract.js reads @type)
-function toJsonLd(shapes, baseIri) {
+function toJsonLd(shapes, contractIri) {
   const ctx = {
     rdf: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
     rdfs: 'http://www.w3.org/2000/01/rdf-schema#',
@@ -218,7 +221,7 @@ function toJsonLd(shapes, baseIri) {
       })
     });
   }
-  return { '@context': ctx, '@id': `${baseIri}shapes`, '@graph': graph };
+  return { '@context': ctx, '@id': contractIri, '@graph': graph };
 }
 
 module.exports = { compile, SERVICE_FIELDS };
