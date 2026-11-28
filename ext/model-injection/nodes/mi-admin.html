@@ -6,6 +6,7 @@ RED.nodes.registerType('fap-ldp-mi-admin', {
     name: { value: 'model-injection admin' },
     baseIri: { value: 'http://localhost:1880/' },
     maxPackages: { value: '50' },
+    modelPath: { value: '' },
     pgHost: { value: '127.0.0.1' },
     pgPort: { value: '5432' },
     pgDatabase: { value: 'fap' },
@@ -24,6 +25,7 @@ RED.nodes.registerType('fap-ldp-mi-admin', {
   <div class="form-row"><label>Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label>Base IRI</label><input type="text" id="node-input-baseIri"></div>
   <div class="form-row"><label>Pod quota (max packages)</label><input type="text" id="node-input-maxPackages"></div>
+  <div class="form-row"><label>Core model.json path (POST /admin/model)</label><input type="text" id="node-input-modelPath" placeholder="empty = $FAP_LDP_CONFIG or /config/model.json"></div>
   <hr>
   <div class="form-row"><label>PG DSN (admin role)</label><input type="text" id="node-input-pgDsn" placeholder="postgres://admin:***@pg:5432/fap"></div>
   <div class="form-row"><label>PG host</label><input type="text" id="node-input-pgHost"></div>
@@ -43,6 +45,12 @@ RED.nodes.registerType('fap-ldp-mi-admin', {
       quotas, contribution agreement <code>dsp.contracts</code>, DDL <code>app.store_&lt;slug&gt;_*</code>,
       <code>dsp.asset_mapping</code>, initial ACLs, audit) → <code>201</code> + <code>Location: /apps/&lt;slug&gt;/meta</code></li>
     <li><code>DELETE /admin/apps/&lt;slug&gt;</code> → revocation (contract revoked, asset unpublished, PDP cache purge)</li>
+    <li><code>POST /admin/model</code> → hot additive patch of the <b>core</b> model.json (v1): admin only,
+      <code>If-Match: "&lt;sha256 of model.json&gt;"</code> required (409 si périmé, 428 si absent),
+      body <code>{ "model": &lt;fragment annexe A&gt; }</code> — additif-only (422 si suppression/modification),
+      une transaction PG (DDL + triggers/RLS/ACL des nouvelles tables + contrat signé <code>dsp.contracts</code> + audit),
+      écriture atomique de model.json (backup <code>.bak</code>, tmp+rename), contrat /shapes rechargé à chaud →
+      <code>200 { hash, contract }</code>. Feature-detect : tout statut ≠ 404 = canal présent.</li>
     <li><code>GET /apps/</code> and <code>GET /apps/&lt;slug&gt;/meta</code> → read, any authenticated user</li>
   </ul>
   <p>v1: writes = <b>admin</b> role only. JSON-LD <code>dspace:Error</code> errors

@@ -28,6 +28,11 @@ ext/model-injection/
 │   └── mi-admin.js/.html        ← node fap-ldp-mi-admin: HTTP endpoints (see below)
 └── tck/
     ├── fragment.test.js         ← unit tests (node --test, no PG): 16 tests
+    ├── diff.test.js             ← unit tests of lib/diff.js (POST /admin/model: diffCoreModel,
+    │                                compileCoreDdl, mergeCoreModel — additif-only, no DROP)
+    ├── admin-model.test.js      ← integration of POST /admin/model (PG 16, skip sans PG_ADMIN_DSN):
+    │                                401/403/405/428/409/422/200, idempotence, ACL, signed contract,
+    │                                atomic model.json write, HTTP layer with a mock RED
     ├── integration-pg.js        ← real integration test (PG 16): 12 tests, AC-B1..B8
     └── e2e-model-injection.sh   ← HTTP TCK against a running stack (AC-B1..B6, B8)
 ```
@@ -52,6 +57,7 @@ ext/model-injection/
 | `DELETE` | `/admin/apps/<slug>` | `admin` | revocation: `revoked` contract (trigger → `pg_notify('fap_revoked')` → PDP cache purge), `asset_mapping.published=false`, `state='revoked'` + `revoked_at` → `204`. Table drop after 30-day purge (`001_mi_maintenance.sql`) |
 | `GET` | `/apps/` | any authenticated user | containers of installed packages |
 | `GET` | `/apps/<slug>/meta` | any authenticated user | record (version, sri, state, contract, tables) + ETag (`If-Match` on DELETE) |
+| `POST` | `/admin/model` | `admin` | **hot additive patch of the CORE model** (v1): `If-Match: "<sha256 of model.json>"` (same hash as `GET /fragment`; `428` if absent, `409` if stale), body `{ "model": <fragment annexe A> }` → validate (`422`) → `diffCoreModel` additif-only (`422 non_additive` on any drop/modification) → **one transaction** (advisory lock + DDL `app.<t>` bare names + triggers/RLS/ACL of new tables via `core/nodes/lib/core-model.js` + `dsp.asset_mapping` + initial ACLs façon 102 + signed republished contract in `dsp.contracts` + audit) → atomic write of `model.json` (`.bak` backup, tmp+rename) → hot-reload (`reloadCore()` + `pg_notify('fap_core_model')`, `GET /shapes` serves the new contract without restart) → `200 { hash, contract }`. Feature-detect: any status ≠ 404 = channel present |
 
 JSON-LD errors `dspace:Error` (AC-B2): `schema_violation`, `invalid_identifier`, `blacklisted_effect`,
 `quota_exceeded`, `prefix_collision` → `422`; `409 Conflict`; nothing is applied on error
@@ -80,7 +86,9 @@ JSON-LD errors `dspace:Error` (AC-B2): `schema_violation`, `invalid_identifier`,
 ## TCK
 
 ```bash
-node --test ext/model-injection/tck/fragment.test.js          # 16 unit tests, no PG
+node --test ext/model-injection/tck/                          # unit tests, no PG (integration skipped)
+PG_ADMIN_DSN=postgres://admin:***@localhost:5432/fap \
+  node --test ext/model-injection/tck/                          # + POST /admin/model integration (PG 16)
 PG_ADMIN_DSN=postgres://admin:***@localhost:5432/fap \
   node ext/model-injection/tck/integration-pg.js              # 12 PG 16 integration tests (AC-B1..B8)
 BASE=http://localhost:18880 TOK_ADMIN=tok-admin \

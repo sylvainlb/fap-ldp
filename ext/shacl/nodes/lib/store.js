@@ -4,6 +4,11 @@
 //   - core model: config model.json (FAP_LDP_CONFIG or config.modelPath)
 // Compilation is lazy (F3.1): first read compiles, cache indexed by fragment_hash; the boot
 // node only prewarms. Revocation (pg_notify fap_revoked) clears the cache (C2).
+// Hot core-model patch (E11 POST /admin/model): the cache is keyed by rawHash, so a rewritten
+// model.json misses the cache anyway — reloadCore() additionally purges the stale core:* entries
+// (memory + explicit invalidation). Triggered in-process by the mi-admin node and cross-process
+// by pg_notify('fap_core_model') (shacl-boot). GET /shapes then serves the new contract with no
+// restart.
 const fs = require('fs');
 const crypto = require('crypto');
 const { compile } = require('./compiler');
@@ -171,9 +176,20 @@ function createStore({ pool, modelPath }) {
     return node ? { ...node, 'reg:published': hit.published } : null;
   }
 
+  // Hot-reload of the CORE model only (POST /admin/model): drop every core:* cache entry.
+  // Package entries (pkg:*) are untouched. Returns the number of invalidated entries.
+  function reloadCore() {
+    let n = 0;
+    for (const k of [...cache.keys()]) {
+      if (k.startsWith('core:')) { cache.delete(k); n++; }
+    }
+    return n;
+  }
+
   return {
     contract, fragmentOf, index, registryOf, shapeOf, publishedMaps, loadPackage, listPackages,
     clearCache: () => cache.clear(),
+    reloadCore,
     cacheSize: () => cache.size
   };
 }

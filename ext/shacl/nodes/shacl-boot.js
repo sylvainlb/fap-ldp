@@ -1,7 +1,9 @@
 // shacl-boot.js — fap-ldp-shacl-boot node (ext/shacl): boot prewarm of published contracts
-// (F3.1, C7) + cache invalidation on revocation (pg_notify fap_revoked, C2). Compilation
-// itself is lazy (first GET compiles, cache keyed by fragment_hash); E11 emits no install
-// event, so the boot only warms the cache, it never blocks serving.
+// (F3.1, C7) + cache invalidation on revocation (pg_notify fap_revoked, C2) and on core-model
+// hot patch (pg_notify fap_core_model → store.reloadCore(), E11 POST /admin/model → GET /shapes
+// serves the new contract without restart). Compilation itself is lazy (first GET compiles,
+// cache keyed by fragment_hash); E11 emits no install event, so the boot only warms the cache,
+// it never blocks serving.
 const { createPool } = require('./lib/pgpool-lite');
 const { createStore } = require('./lib/store');
 
@@ -23,10 +25,15 @@ module.exports = function (RED) {
     let listener = null;
 
     (async () => {
-      // revocation channel (same one E11 revocation triggers via dsp.contracts): drop the cache
+      // revocation channel (same one E11 revocation triggers via dsp.contracts): drop the cache;
+      // core-model hot patch (E11 POST /admin/model): purge the core:* entries only (reloadCore)
       listener = await node.pool.connect();
-      listener.on('notification', () => store.clearCache());
+      listener.on('notification', (msg) => {
+        if (msg && msg.channel === 'fap_core_model') store.reloadCore();
+        else store.clearCache();
+      });
       await listener.query('LISTEN fap_revoked');
+      await listener.query('LISTEN fap_core_model');
 
       // prewarm (C7: demo deployment core + packages < 5 s)
       const t0 = Date.now();

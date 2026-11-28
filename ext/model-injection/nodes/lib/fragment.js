@@ -19,6 +19,9 @@ const FIELD_KEYS = new Set(['type', 'serial', 'not_null', 'unique', 'default', '
   // v0.6 (app-shape-editor rev 4.13, annexe A): display-only description, consumed by the model registry UI
   'description_i18n']);
 const ROOT_KEYS = new Set(['tables', 'supersedes']); // v0.4: supersedes (R1.6) = "<slug>@<version>"
+// v1 coreDialect (POST /admin/model): the core model.json carries its own root metadata keys
+// ($comment, base_iri, business_rules) — accepted in core dialect only, never for packages.
+const CORE_ROOT_KEYS = new Set([...ROOT_KEYS, '$comment', 'base_iri', 'business_rules']);
 // v0.4/A.2: table names colliding with routes reserved by the core for ext/shacl + E11
 const RESERVED_TABLES = new Set(['meta', 'shapes', 'validate', 'fragment']);
 const IRI_RE = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/;   // full IRI or prefixed form (geo:lat, dcterms:description)
@@ -58,13 +61,24 @@ function validateLabelI18n(v, where, key = 'label_i18n') {
   }
 }
 
-function validateFragment(fragment, rawBytes) {
+// opts.coreDialect (v1, POST /admin/model): the CORE model.json dialect — fk towards any core
+// table (not only users), core table keys (parent/parent_fk/container_name/unique/internal),
+// pk ≠ "id" allowed on internal tables, and the per-PACKAGE quotas (§4.5) relaxed (the core
+// model is not a package). Everything else stays strict annexe A.
+const CORE_TABLE_KEYS = new Set([...TABLE_KEYS, 'parent', 'parent_fk', 'container_name', 'unique', 'internal', '$comment']);
+
+function validateFragment(fragment, rawBytes, opts = {}) {
+  const core = !!opts.coreDialect;
+  const tableKeys = core ? CORE_TABLE_KEYS : TABLE_KEYS;
+  const maxTables = core ? 200 : QUOTAS.maxTables;
+  const maxFieldsPackage = core ? 2000 : QUOTAS.maxFieldsPerPackage;
   if (rawBytes !== undefined && rawBytes > QUOTAS.maxPayloadBytes)
     throw new FragmentError('quota_exceeded', `fragment payload > ${QUOTAS.maxPayloadBytes} bytes (§4.5)`);
   if (!fragment || typeof fragment !== 'object' || Array.isArray(fragment))
     throw new FragmentError('schema_violation', 'fragment: root object expected');
+  const rootKeys = core ? CORE_ROOT_KEYS : ROOT_KEYS;
   for (const k of Object.keys(fragment))
-    if (!ROOT_KEYS.has(k)) throw new FragmentError('schema_violation', `unauthorized root key: ${k}`);
+    if (!rootKeys.has(k)) throw new FragmentError('schema_violation', `unauthorized root key: ${k}`);
   if (fragment.supersedes !== undefined &&
       (typeof fragment.supersedes !== 'string' || !SUPERSEDES_RE.test(fragment.supersedes)))
     throw new FragmentError('schema_violation', 'fragment.supersedes must be "<slug>@<version>" (R1.6)');
@@ -73,8 +87,8 @@ function validateFragment(fragment, rawBytes) {
     throw new FragmentError('schema_violation', 'fragment.tables: object required');
   const tableNames = Object.keys(tables);
   if (tableNames.length < 1) throw new FragmentError('schema_violation', 'fragment.tables: min 1 table');
-  if (tableNames.length > QUOTAS.maxTables)
-    throw new FragmentError('quota_exceeded', `> ${QUOTAS.maxTables} tables/package (§4.5)`);
+  if (tableNames.length > maxTables)
+    throw new FragmentError('quota_exceeded', `> ${maxTables} tables (§4.5)`);
 
   let totalFields = 0;
   for (const [tName, spec] of Object.entries(tables)) {
@@ -84,16 +98,25 @@ function validateFragment(fragment, rawBytes) {
     if (!spec || typeof spec !== 'object' || Array.isArray(spec))
       throw new FragmentError('schema_violation', `table ${tName}: object expected`);
     for (const k of Object.keys(spec))
-      if (!TABLE_KEYS.has(k)) throw new FragmentError('schema_violation', `table ${tName}: unauthorized key ${k}`);
+      if (!tableKeys.has(k)) throw new FragmentError('schema_violation', `table ${tName}: unauthorized key ${k}`);
     if (typeof spec.pk !== 'string' || !NAME_RE.test(spec.pk))
       throw new FragmentError('invalid_identifier', `table ${tName}: invalid pk`);
     if (!spec.fields || typeof spec.fields !== 'object')
       throw new FragmentError('schema_violation', `table ${tName}: fields required`);
 
     // v1: the base generic triggers (app.version_trigger etc.) use NEW.id
-    // → the pk of an injected table MUST be the "id" bigint serial column.
-    if (spec.pk !== 'id')
+    // → the pk of an injected table MUST be the "id" bigint serial column
+    // (core dialect: internal tables of the server itself may use another pk).
+    if (spec.pk !== 'id' && !(core && spec.internal === true))
       throw new FragmentError('schema_violation', `table ${tName}: pk must be "id" in v1 (base triggers)`);
+    if (core) {
+      for (const k of ['parent', 'parent_fk', 'container_name'])
+        if (spec[k] !== undefined && spec[k] !== null && !NAME_RE.test(spec[k]))
+          throw new FragmentError('invalid_identifier', `table ${tName}: invalid ${k}`);
+      if (spec.unique !== undefined &&
+          (!Array.isArray(spec.unique) || spec.unique.some(u => !Array.isArray(u) || u.some(x => !NAME_RE.test(x)))))
+        throw new FragmentError('schema_violation', `table ${tName}: unique = array of field-name arrays`);
+    }
 
     if (spec.owner !== undefined && spec.owner !== null) {
       if (!NAME_RE.test(spec.owner)) throw new FragmentError('invalid_identifier', `table ${tName}: invalid owner`);
@@ -125,6 +148,9 @@ function validateFragment(fragment, rawBytes) {
 
     for (const [fName, f] of Object.entries(fields)) {
       if (!NAME_RE.test(fName)) throw new FragmentError('invalid_identifier', `table ${tName}: field outside regex: ${fName}`);
+      // v1 coreDialect: the core model.json uses SQL-ish string field defs ("text not null",
+      // "bigint fk buildings(id)") — accepted as-is in core dialect only; diff.js normalizes them.
+      if (core && typeof f === 'string') { if (!f.trim()) throw new FragmentError('schema_violation', `table ${tName}.${fName}: empty field`); continue; }
       if (!f || typeof f !== 'object' || Array.isArray(f))
         throw new FragmentError('schema_violation', `table ${tName}.${fName}: object expected`);
       for (const k of Object.keys(f))
@@ -142,9 +168,12 @@ function validateFragment(fragment, rawBytes) {
         if (f.check_in.length > QUOTAS.maxCheckIn)
           throw new FragmentError('quota_exceeded', `field ${tName}.${fName}: check_in > ${QUOTAS.maxCheckIn} items`);
       }
-      if (f.fk !== undefined && f.fk !== 'users')
-        // §4.4: FKs allowed only towards app.users; forbidden between packages
-        throw new FragmentError('blacklisted_effect', `field ${tName}.${fName}: fk allowed only towards "users" (§4.4)`);
+      if (f.fk !== undefined && !(core ? NAME_RE.test(f.fk) : f.fk === 'users'))
+        // §4.4: FKs allowed only towards app.users; forbidden between packages.
+        // core dialect (POST /admin/model): fk towards any core table (e.g. fk buildings(id)).
+        throw new FragmentError('blacklisted_effect',
+          core ? `field ${tName}.${fName}: invalid fk target "${f.fk}"`
+               : `field ${tName}.${fName}: fk allowed only towards "users" (§4.4)`);
       // v0.4 field keys (semantic profile — contract-only)
       if (f.node_kind !== undefined && !['iri', 'literal'].includes(f.node_kind))
         throw new FragmentError('schema_violation', `field ${tName}.${fName}: node_kind must be "iri"|"literal"`);
@@ -165,23 +194,28 @@ function validateFragment(fragment, rawBytes) {
     // pk / owner / tombstone consistency
     const pkF = fields[spec.pk];
     if (!pkF) throw new FragmentError('schema_violation', `table ${tName}: pk "${spec.pk}" missing from fields`);
-    if (pkF.type !== 'bigint' || pkF.serial !== true)
+    // pk "id" → bigint serial (base triggers use NEW.id); core internal tables may use another
+    // whitelisted pk (e.g. components.slug, ai_models.name) — allowed in core dialect only.
+    // core dialect: pk may be a SQL-ish string ("bigserial") — normalized by diff.js
+    if (spec.pk === 'id' && !(core && typeof pkF === 'string') && (pkF.type !== 'bigint' || pkF.serial !== true))
       throw new FragmentError('schema_violation', `table ${tName}: pk "id" must be {type:bigint, serial:true}`);
+    if (spec.pk !== 'id' && !core)
+      throw new FragmentError('schema_violation', `table ${tName}: pk must be "id" in v1 (base triggers)`);
     if (spec.owner !== undefined && spec.owner !== null) {
       const o = fields[spec.owner];
       if (!o) throw new FragmentError('schema_violation', `table ${tName}: owner "${spec.owner}" missing from fields`);
-      if (o.type !== 'bigint' || o.fk !== 'users')
+      if (!(core && typeof o === 'string') && (o.type !== 'bigint' || !(core ? !!o.fk : o.fk === 'users')))
         throw new FragmentError('schema_violation', `table ${tName}: owner must be bigint fk users`);
     }
     if (spec.tombstone !== undefined && spec.tombstone !== null) {
       const t = fields[spec.tombstone];
       if (!t) throw new FragmentError('schema_violation', `table ${tName}: tombstone "${spec.tombstone}" missing from fields`);
-      if (t.type !== 'timestamptz')
+      if (!(core && typeof t === 'string') && t.type !== 'timestamptz')
         throw new FragmentError('schema_violation', `table ${tName}: tombstone must be timestamptz`);
     }
   }
-  if (totalFields > QUOTAS.maxFieldsPerPackage)
-    throw new FragmentError('quota_exceeded', `> ${QUOTAS.maxFieldsPerPackage} fields/package (§4.5)`);
+  if (totalFields > maxFieldsPackage)
+    throw new FragmentError('quota_exceeded', `> ${maxFieldsPackage} fields/package (§4.5)`);
   return true;
 }
 
@@ -227,20 +261,10 @@ function compileFragment(slug, fragment) {
     const pattern = `/apps/${slug}/${tName}/<${spec.pk}>`;
     const statements = [];
 
-    // CREATE TABLE (idempotent)
+    // CREATE TABLE (idempotent) — column generation factorized in columnSql() (also used by
+    // ext/model-injection diff.js compileCoreDdl for the CORE tables app.<table>, bare names)
     const cols = [];
-    for (const [fName, f] of Object.entries(spec.fields)) {
-      let sql = quoteIdent(fName) + ' ';
-      if (f.serial) sql += 'bigserial';                       // serial id pk (enforced in v1)
-      else sql += PG_TYPES[f.type];
-      if (fName === spec.pk) sql += ' PRIMARY KEY';
-      if (f.not_null && fName !== spec.pk) sql += ' NOT NULL';
-      if (f.unique) sql += ' UNIQUE';
-      if (f.default !== undefined) sql += ' DEFAULT ' + defaultSql(f.default);
-      if (f.check_in) sql += ` CHECK (${quoteIdent(fName)} IN (${f.check_in.map(quoteLiteral).join(', ')}))`;
-      if (f.fk === 'users') sql += ` REFERENCES app.${quoteIdent('users')}(${quoteIdent('id')})`;
-      cols.push(sql);
-    }
+    for (const [fName, f] of Object.entries(spec.fields)) cols.push(columnSql(fName, f, spec.pk));
     statements.push(`CREATE TABLE IF NOT EXISTS app.${quoteIdent(physical)} (${cols.join(', ')})`);
     statements.push(`GRANT SELECT, INSERT, UPDATE, DELETE ON app.${quoteIdent(physical)} TO app`);
     statements.push(`GRANT USAGE, SELECT ON SEQUENCE app.${quoteIdent(physical + '_' + spec.pk + '_seq')} TO app`);
@@ -289,6 +313,22 @@ function defaultSql(d) {
   return quoteLiteral(d);
 }
 
+// Single-column DDL fragment (without the leading name), shared by compileFragment (E11
+// packages, app.store_<slug>_<table>) and diff.js compileCoreDdl (core tables, app.<table>).
+// fk targets app.<f.fk>(id) — for E11 the only allowed target is "users" (§4.4).
+function columnSql(fName, f, pkName) {
+  let sql = quoteIdent(fName) + ' ';
+  if (f.serial) sql += 'bigserial';                       // serial id pk (enforced in v1)
+  else sql += PG_TYPES[f.type];
+  if (fName === pkName) sql += ' PRIMARY KEY';
+  if (f.not_null && fName !== pkName) sql += ' NOT NULL';
+  if (f.unique) sql += ' UNIQUE';
+  if (f.default !== undefined) sql += ' DEFAULT ' + defaultSql(f.default);
+  if (f.check_in) sql += ` CHECK (${quoteIdent(fName)} IN (${f.check_in.map(quoteLiteral).join(', ')}))`;
+  if (f.fk) sql += ` REFERENCES app.${quoteIdent(f.fk)}(${quoteIdent('id')})`;
+  return sql;
+}
+
 // ---------- live schema → canonical (drift detection at boot, §5) ----------
 // Reads information_schema for app.store_<slug>_* and rebuilds the comparable canonical form.
 
@@ -326,6 +366,6 @@ async function liveCanonical(client, slug) {
 
 module.exports = {
   SLUG_RE, NAME_RE, QUOTAS, FragmentError,
-  quoteIdent, quoteLiteral, physicalTable,
+  quoteIdent, quoteLiteral, physicalTable, columnSql, defaultSql, PG_TYPES,
   validateFragment, compileFragment, fragmentHash, canonicalForCompare, stableStringify, liveCanonical
 };

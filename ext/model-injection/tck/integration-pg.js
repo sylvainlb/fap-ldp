@@ -13,7 +13,7 @@ const { installPackage, revokePackage, applyFragmentsAtBoot } = require(path.joi
 const { FragmentError, compileFragment } = require(path.join(__dirname, '..', 'nodes', 'lib', 'fragment'));
 
 const DSN = process.env.PG_ADMIN_DSN;
-if (!DSN) { consumptionle.error('PG_ADMIN_DSN required'); process.exit(2); }
+if (!DSN) { console.error('PG_ADMIN_DSN required'); process.exit(2); }
 const BASE = process.env.BASE_IRI || 'http://localhost:18880/';
 const WEBID = 'https://supervision.example/users/1';
 
@@ -48,8 +48,8 @@ const FRAGMENT2 = {
 
 let pass = 0, fail = 0;
 function ck(name, fn) {
-  return Promise.resolve().then(fn).then(() => { pass++; consumptionle.log('PASS', name); })
-    .catch(e => { fail++; consumptionle.log('FAIL', name, '-', e.message); });
+  return Promise.resolve().then(fn).then(() => { pass++; console.log('PASS', name); })
+    .catch(e => { fail++; console.log('FAIL', name, '-', e.message); });
 }
 
 async function main() {
@@ -61,7 +61,7 @@ async function main() {
     const sql = fs.readFileSync(path.join(__dirname, '..', 'sql', f), 'utf8');
     await q(sql);
   }
-  consumptionle.log('PASS migrations 000+001 applied');
+  console.log('PASS migrations 000+001 applied');
 
   // initial cleanup (tables left from a previous run + rows)
   await q("DELETE FROM app.app_packages WHERE slug LIKE 'mi_test_%'");
@@ -205,8 +205,8 @@ async function main() {
   await q("DELETE FROM dsp.contracts WHERE agreement_id LIKE 'agr-mi-mi_test_%'");
   await q("DELETE FROM dsp.audit WHERE resource_uri LIKE '/apps/mi_test_%'");
   await pool.end();
-  consumptionle.log(`== ${pass} PASS, ${fail} FAIL ==`);
+  console.log(`== ${pass} PASS, ${fail} FAIL ==`);
   process.exit(fail ? 1 : 0);
 }
 
-main().catch(e => { consumptionle.error('FATAL ERROR', e); process.exit(1); });
+main().catch(e => { console.error('FATAL ERROR', e); process.exit(1); });

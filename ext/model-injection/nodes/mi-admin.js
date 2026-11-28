@@ -2,15 +2,23 @@
 // injection contract (spec model-injection-spec.md v0.3 §3.1).
 //   POST   /admin/apps            → install (one transaction, AC-B1/B2/B8)
 //   DELETE /admin/apps/<slug>     → revocation (AC-B4), If-Match/ETag on the meta record
+//   POST   /admin/model           → hot additive patch of the CORE model (model.json), v1:
+//                                   admin only, If-Match obligatoire, additif-only, une
+//                                   transaction PG, backup + écriture atomique de model.json,
+//                                   contrat republié signé (dsp.contracts) + audit, hot-reload
+//                                   du contrat /shapes sans restart (lib/corepatch.js)
 //   GET    /apps/                 → containers of installed packages (any authenticated user)
 //   GET    /apps/<slug>/meta      → package record (version, contract, state) + ETag
 // The LDP containers /apps/<slug>/<table>/ themselves are served by the core PEP via
 // dsp.asset_mapping (the core reserves /admin/, /apps/ and /apps/<slug>/meta for this ext).
 // v1: writes = admin role only (§3.2); JSON-LD dspace:Error errors (AC-B2).
+// Feature-detect of POST /admin/model: any HTTP status ≠ 404 means the channel exists
+// (401 unauthenticated, 403 non-admin, 405 non-POST) — used by the model editor screen 5.
 const { createPool } = require('./lib/pgpool-lite');
 const { claimsFromRequest } = require('./lib/auth');
 const { installPackage, revokePackage, listPackages, packageMeta, HttpError } = require('./lib/installer');
 const { FragmentError } = require('./lib/fragment');
+const { handleAdminModel } = require('./lib/corepatch');
 
 module.exports = function (RED) {
   function MiAdminNode(config) {
@@ -21,16 +29,17 @@ module.exports = function (RED) {
     node.devTokens = safeJson(config.devTokens);
     node.idpUserinfoUrl = (config.idpUserinfoUrl && config.idpUserinfoUrl !== 'false') ? config.idpUserinfoUrl : '';
     node.maxPackages = parseInt(config.maxPackages, 10) || 50; // pod quota (§4.5, §9)
+    node.modelPath = config.modelPath || process.env.FAP_LDP_CONFIG || '/config/model.json'; // core model.json (POST /admin/model)
 
     RED.httpNode.disable('etag');
 
     RED.httpNode.use((req, res, next) => {
       const p = req.path;
-      const isAdmin = p === '/admin/apps' || /^\/admin\/apps\/[^/]+$/.test(p);
+      const isAdmin = p === '/admin/apps' || p === '/admin/model' || /^\/admin\/apps\/[^/]+$/.test(p);
       const isAppsList = p === '/apps' || p === '/apps/';
       const mMeta = p.match(/^\/apps\/([^/]+)\/meta$/);
       if (!isAdmin && !isAppsList && !mMeta) return next();
-      handle(req, res, { isAdmin, isAppsList, slugMeta: mMeta && mMeta[1] }).catch(e => {
+      handle(req, res, { isAdmin, isAdminModel: p === '/admin/model', isAppsList, slugMeta: mMeta && mMeta[1] }).catch(e => {
         node.error(e.stack || e.message);
         if (!res.headersSent) sendError(res, 500, 'InternalError', e.message);
       });
@@ -113,6 +122,25 @@ module.exports = function (RED) {
 
       // ---------- write: admin role only in v1 (§3.2) ----------
       if (claims.role !== 'admin') return sendError(res, 403, 'Forbidden', 'admin role required (v1, §3.2)');
+
+      // ---------- POST /admin/model — hot additive patch of the core model (v1) ----------
+      if (route.isAdminModel) {
+        let out;
+        try {
+          out = await handleAdminModel({
+            pool: node.pool, modelPath: node.modelPath, baseIri: node.baseIri,
+            claims, method, ifMatch: req.headers['if-match'], body: req.body
+          });
+        } catch (e) {
+          if (e instanceof FragmentError) return sendError(res, 422, e.code, e.message);
+          if (e instanceof HttpError) return sendError(res, e.status, e.code, e.message);
+          throw e;
+        }
+        if (out.status !== 200) return sendError(res, out.status, out.code, out.message);
+        // no secret in logs: only the hash + the additive counts
+        node.log(`fap-ldp mi-admin: POST /admin/model → 200 hash=${out.body.hash.slice(0, 12)}… creates=${out.body.contract.creates.length} alters=${out.body.contract.alters.length} agreement=${out.body.contract.agreement_id}`);
+        return sendJsonLd(res, 200, out.body, { ETag: '"' + out.body.hash + '"' });
+      }
 
       if (method === 'POST' && route.isAdmin && req.path === '/admin/apps') {
         const body = req.body || {};
