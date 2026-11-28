@@ -2,7 +2,7 @@
  {
   "id": "shacl-tab",
   "type": "tab",
-  "label": "E5 shacl (contrats publiés)",
+  "label": "E5 shacl (published contracts)",
   "disabled": false,
   "info": ""
  },
@@ -24,7 +24,7 @@
   "id": "shacl-boot",
   "type": "fap-ldp-shacl-boot",
   "z": "shacl-tab",
-  "name": "shacl boot (prewarm contrats + pg_notify fap_revoked)",
+  "name": "shacl boot (prewarm contracts + pg_notify fap_revoked)",
   "baseIri": "${FAP_LDP_BASE_IRI}",
   "pgDsn": "${PG_ADMIN_DSN}",
   "pgPoolMax": "2",

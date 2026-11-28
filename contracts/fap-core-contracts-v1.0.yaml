@@ -8,9 +8,9 @@ metadata:
   version: "1.0"
 spec:
   contracts:
-    - id: message-envelope
+    - id: message-enbikepe
       version: "1.0"
-      summary: "Unified message envelope (type, source, timestamp, payload fields) — gate routing on the type field"
+      summary: "Unified message enbikepe (type, source, timestamp, payload fields) — gate routing on the type field"
     - id: bronze-line-contract
       version: "1.0"
       summary: "Bronze row contract: raw_payload JSONB + lineage (source_topic, source_system, ingest_timestamp, message_key, source_seq)"

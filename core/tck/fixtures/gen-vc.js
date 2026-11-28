@@ -9,4 +9,4 @@ const payload = Object.assign({
 }, process.argv[3] ? JSON.parse(process.argv[3]) : {});
 const input = b64u(header) + '.' + b64u(payload);
 const sig = crypto.sign('sha256', Buffer.from(input), { key: crypto.createPrivateKey({ key: key.privateKeyJwk, format: 'jwk' }), dsaEncoding: 'ieee-p1363' }).toString('base64url');
-console.log(input + '.' + sig);
+consumptionle.log(input + '.' + sig);

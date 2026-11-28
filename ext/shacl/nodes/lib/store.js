@@ -116,12 +116,12 @@ function createStore({ pool, modelPath }) {
     return { sources };
   }
 
-  // Registre des objets (chantier 3 rev 8): TOUTES les tables du modèle — publiées ou non —
-  // chacune avec son flag published : 1 shape = 1 objet = 1 entrée. Le contrat publié
-  // (contract()) ne garde que les tables publiées (R1.4/F3.3) ; le registre liste tout.
+  // Object registry (workstream 3 rev 8): ALL tables of the model — published or not —
+  // each with its published flag: 1 shape = 1 object = 1 entry. The published contract
+  // (contract()) keeps only published tables (R1.4/F3.3); the registry lists everything.
   function tablesFromFragment(fragment, slug, baseIri, publishedSet, cacheKey) {
     if (cache.has(cacheKey)) return cache.get(cacheKey);
-    // compile SANS filtre published → toutes les shapes
+    // compile WITHOUT the published filter → all shapes
     const full = compile({ fragment, baseIri, slug, published: null });
     const toMap = (labels, fallback) => {
       const m = {};
@@ -156,8 +156,8 @@ function createStore({ pool, modelPath }) {
     return tablesFromFragment(pkg.model_fragment, kind, baseIri, pub.pkgs.get(kind) || new Set(), `pkg:${kind}:${pkg.fragment_hash}:reg`);
   }
 
-  // Shape unique d'un objet : GET /shapes/<table> (core) / /apps/<slug>/shapes/<table> —
-  // chantier 3 rev 8 : la shape en JSON-LD avec reg:published embarqué (null → 404).
+  // Single shape of an object: GET /shapes/<table> (core) / /apps/<slug>/shapes/<table> —
+  // workstream 3 rev 8: the shape in JSON-LD with reg:published embedded (null → 404).
   async function shapeOf(kind, table, baseIri) {
     const reg = await registryOf(kind, baseIri);
     const hit = reg?.find((t) => t.table === table || t.phys === table);
@@ -177,7 +177,7 @@ function createStore({ pool, modelPath }) {
   };
 }
 
-// Pure index entry — chantier 3 (app-ui-editor/src/editor.js) reads `sources[]` with
+// Pure index entry — workstream 3 (app-ui-editor/src/editor.js) reads `sources[]` with
 // `contract` (URL) and `package` ('/apps/<slug>/meta'); F3.6 fields (contractUri, state,
 // fragmentHash, supersedes…) are kept alongside for the model editor.
 function indexEntry(s, baseIri) {
@@ -188,14 +188,14 @@ function indexEntry(s, baseIri) {
     slug: s.slug,
     version: s.version,
     state: s.state,
-    contract,                                   // chantier 3 primary field
-    package: isCore ? null : `/apps/${s.slug}/meta`, // chantier 3 fallback derivation
+    contract,                                   // workstream 3 primary field
+    package: isCore ? null : `/apps/${s.slug}/meta`, // workstream 3 fallback derivation
     contractUri: contract,
     fragmentUri: isCore ? `${baseIri}fragment` : `${baseIri}apps/${s.slug}/fragment`,
     fragmentHash: s.fragmentHash,
     supersedes: s.supersedes,
     published: s.hasContract,
-    tables: s.tables ?? []                      // chantier 3 rev 8: registre des objets (all tables + flag published)
+    tables: s.tables ?? []                      // workstream 3 rev 8: object registry (all tables + published flag)
   };
 }
 

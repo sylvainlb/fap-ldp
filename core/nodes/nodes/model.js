@@ -54,6 +54,9 @@ module.exports = function (RED) {
         const sql = fieldToSql(name, def);
         return name === spec.pk ? `${name} ${sql} PRIMARY KEY` : `${name} ${sql}`;
       });
+      if (Array.isArray(spec.unique)) {
+        for (const u of spec.unique) cols.push(`UNIQUE (${u.join(', ')})`);
+      }
       const q = `CREATE TABLE IF NOT EXISTS app.${table} (${cols.join(', ')})`;
       await node.pool.query(q);
       await node.pool.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON app.${table} TO app;
@@ -86,11 +89,18 @@ module.exports = function (RED) {
       // → nested IRI /<parent>/<parent_fk>/<table>/<pk>; otherwise flat container /<table>/
       if (spec.parent && spec.parent_fk) {
         const parent = spec.parent, fkField = spec.parent_fk;
+        // container_name override (rev 9 workstream 3, F1.1): e.g. user_components under
+        // users is exposed as /users/*/components/ — 1 shape, 1 container name chosen.
+        const cname = spec.container_name ?? table;
         return {
-          container: `/${parent}/*/${table}/`,
-          pattern: `/${parent}/<${fkField}>/${table}/<${spec.pk}>`,
-          expr: `rtrim(current_setting('app.base_iri', true), '/') || '/${parent}/' || ${fkField}::text || '/${table}/' || ${spec.pk}::text`,
-          insertExpr: `rtrim(current_setting('app.base_iri', true), '/') || '/${parent}/' || ${fkField}::text`,
+          container: `/${parent}/*/${cname}/`,
+          pattern: `/${parent}/<${fkField}>/${cname}/<${spec.pk}>`,
+          expr: `rtrim(current_setting('app.base_iri', true), '/') || '/${parent}/' || ${fkField}::text || '/${cname}/' || ${spec.pk}::text`,
+          // with an explicit container_name, INSERT checks the sub-container itself
+          // (owner-only ACL lives there); legacy nested tables keep the parent IRI.
+          insertExpr: spec.container_name
+            ? `rtrim(current_setting('app.base_iri', true), '/') || '/${parent}/' || ${fkField}::text || '/${cname}/'`
+            : `rtrim(current_setting('app.base_iri', true), '/') || '/${parent}/' || ${fkField}::text`,
           where: `${fkField} = $1 AND ${spec.pk} = $2`
         };
       }

@@ -3,11 +3,11 @@
 // reserved for this ext by the core route patch (A.2):
 //   GET /shapes                     → core model contract (Turtle, JSON-LD admitted) + ETag  (F3.2/F3.4)
 //   GET /shapes/                    → index of all sources (core + packages, all states), each
-//                                     with tables[] = registry of objects (all tables + flag) (F3.6, ch.3 rev 8)
+//                                     with tables[] = registry of objects (all tables + flag) (F3.6, ws 3 rev 8)
 //   GET /shapes/<table>             → single object shape, JSON-LD, reg:published embedded, 404 unknown
 //   GET /fragment                   → core model.json + hash                                 (F3.5)
 //   GET /apps/<slug>/shapes         → package contract (published tables only) + ETag        (F3.2/F3.3)
-//   GET /apps/<slug>/shapes/<table> → single object shape of a package (reg:published, 404)   (ch.3 rev 8)
+//   GET /apps/<slug>/shapes/<table> → single object shape of a package (reg:published, 404)   (ws 3 rev 8)
 //   GET /apps/<slug>/fragment       → raw fragment + fragment_hash + state + supersedes     (F3.5)
 // Read = any authenticated pod user (same as GET /apps/ in E11). No write path here:
 // the write path stays SQL-only (spec §1); validation endpoints land in J3 (POST .../validate).
@@ -81,10 +81,10 @@ module.exports = function (RED) {
     }
 
     // Content negotiation (F3.2): Turtle when explicitly requested, JSON-LD otherwise —
-    // chantier 3 (app-ui-editor) fetches the contract with a plain res.json().
+    // workstream 3 (app-ui-editor) fetches the contract with a plain res.json().
     function wantsTurtle(req) {
       const a = String(req.headers.accept || '');
-      if (!a || a === '*/*') return false; // default → JSON-LD (chantier 3 reader)
+      if (!a || a === '*/*') return false; // default → JSON-LD (workstream 3 reader)
       if (/text\/turtle/.test(a) && !/json/.test(a)) return true;
       return false;
     }
@@ -136,7 +136,7 @@ module.exports = function (RED) {
         });
       }
 
-      // GET /shapes/<table> (core) / GET /apps/<slug>/shapes/<table> (package) — chantier 3 rev 8:
+      // GET /shapes/<table> (core) / GET /apps/<slug>/shapes/<table> (package) — workstream 3 rev 8:
       // 1 shape = 1 JSON = 1 object type, with reg:published embedded; 404 unknown table.
       if (route.mCoreShape || route.mPkgShape) {
         const kind = route.mCoreShape ? 'core' : route.mPkgShape[1];
@@ -217,7 +217,7 @@ module.exports = function (RED) {
       return res.status(200).set('Content-Type', 'application/ld+json').json(report);
     }
 
-    // POST /shacl/preview — compile a DRAFT fragment without persisting anything (écran 4 of the
+    // POST /shacl/preview — compile a DRAFT fragment without persisting anything (screen 4 of the
     // editor: live contract preview + diff + optional sample validation). Body:
     // { fragment, slug? , publishedTables?, data? } → { hash, turtle, report? }
     async function handlePreview(req, res) {

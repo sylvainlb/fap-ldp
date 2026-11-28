@@ -1,4 +1,4 @@
-# Evidence TCK (logs, rapports JUnit) — générés à l'exécution
+# TCK evidence (logs, JUnit reports) — generated at runtime
 tck/evidence/
 *.log
 
@@ -7,15 +7,15 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Secrets et config locales
+# Secrets and local config
 *.local.properties
 *.local
 .env
 *.pem
 *.key
 compose/.env*
-compose/deploy/          # dossier de déploiement local (config/model.json, sql/ custom) — jamais commité
+compose/deploy/          # local deployment folder (config/model.json, custom sql/) — never committed
 charts/fap-ldp/values.local.yaml
 
-# Dépendances npm des packages de nœuds
+# npm dependencies of the node packages
 node_modules/

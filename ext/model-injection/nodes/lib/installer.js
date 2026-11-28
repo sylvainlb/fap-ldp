@@ -251,7 +251,7 @@ async function applyFragmentsAtBoot(pool, baseIri, log) {
   client.release();
   for (const slug of drifted) {
     const msg = `fap-ldp ext/model-injection: DRIFT detected on package "${slug}" (live schema ≠ fragment_hash) — state set to 'drift', audit written (§5)`;
-    (log || console.error)(msg);
+    (log || consumptionle.error)(msg);
   }
   return { applied, drifted };
 }

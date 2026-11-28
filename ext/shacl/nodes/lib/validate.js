@@ -27,7 +27,7 @@ function prefixMap(doc) {
 function expand(term, map) {
   if (typeof term !== 'string') return null;
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(term)) return term; // already an IRI
-  const m = term.match(/^([A-Za-z][A-Za-z0-9_]*):(.+)$/); // prefix names may contain _ (app_tickets, app_store_flotte_vehicules)
+  const m = term.match(/^([A-Za-z][A-Za-z0-9_]*):(.+)$/); // prefix names may contain _ (app_tickets, app_store_fleet_vehicles)
   if (m && map[m[1].toLowerCase()]) return map[m[1].toLowerCase()] + m[2];
   return null; // keyword or unmapped term — not a property IRI
 }
@@ -114,7 +114,7 @@ function validate(dataDoc, shapes, opts = {}) {
 
   for (const shape of shapes) {
     if (only && shape.iri !== only) continue;
-    // focus nodes: declared targetClass (ns#, per R1.3 / chantier 3 contract.js) OR the served
+    // focus nodes: declared targetClass (ns#, per R1.3 / workstream 3 contract.js) OR the served
     // @type form ns#Camel(table) emitted by jsonld.resourceDoc (rev 4.1)
     const ns = shape.iri.replace(/Shape$/, '');
     const phys = ns.split('#')[0].split('/').pop();
@@ -142,7 +142,7 @@ function validate(dataDoc, shapes, opts = {}) {
           }
           if (p.class && v.kind === 'iri') {
             const target = byId.get(v.iri);
-            // sh:class = class IRI (ns#, chantier 3 form) → match the shape whose targetClass is it
+            // sh:class = class IRI (ns#, workstream 3 form) → match the shape whose targetClass is it
             const classShape = shapes.find(s => s.iri === p.class || s.targetClass === p.class);
             if (classShape && target && !target.types.has(classShape.targetClass) && !target.types.has(servedTypeOf(classShape))) {
               results.push(result(f.id, p.iri, 'sh:ClassConstraintComponent',

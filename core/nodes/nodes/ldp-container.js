@@ -54,10 +54,10 @@ module.exports = function (RED) {
           || /^\/apps\/[^/]+\/meta$/.test(req.path)) return next();
       // Reserved for ext/shacl (E5, spec app-shape-editor rev 4, A.2): published SHACL contracts,
       // fragment read (source of truth), source index (+ tables[] registry and per-object
-      // shapes /shapes/<table>, /apps/<slug>/shapes/<table>, chantier 3 rev 8), external validation.
+      // shapes /shapes/<table>, /apps/<slug>/shapes/<table>, workstream 3 rev 8), external validation.
       // Same nature and scope as the E11 reservation above (C5): pure route reservation,
       // no behavior of the LDP path changes. Table names colliding with these segments
-      // (meta, shapes, validate, fragment) are rejected at injection time (annexe A v0.4).
+      // (meta, shapes, validate, fragment) are rejected at injection time (appendix A v0.4).
       if (/^\/shapes(?:\/[^/]+)?\/?$/.test(req.path)
           || /^\/fragment$/.test(req.path)
           || /^\/shacl\/preview$/.test(req.path)

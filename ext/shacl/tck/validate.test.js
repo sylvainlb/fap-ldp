@@ -7,17 +7,17 @@ const { compile } = require('../nodes/lib/compiler');
 const { validate } = require('../nodes/lib/validate');
 
 const BASE = 'https://pod.example/';
-const NS = BASE + 'ns/app/store_flotte_vehicules#';
+const NS = BASE + 'ns/app/store_fleet_vehicles#';
 const CORE_NS = BASE + 'ns/app/users#';
 
 const fragment = {
   tables: {
-    vehicules: {
+    vehicles: {
       pk: 'id', published: true,
       fields: {
         id: { type: 'bigint', serial: true },
-        immatriculation: { type: 'text', not_null: true, check_in: ['AA-111', 'BB-222'] },
-        prix: { type: 'numeric' },
+        registration: { type: 'text', not_null: true, check_in: ['AA-111', 'BB-222'] },
+        price: { type: 'numeric' },
         description: { type: 'text', lang: true, align: 'dcterms:description' },
         created_by: { type: 'bigint', fk: 'users', node_kind: 'iri' }
       }
@@ -29,18 +29,18 @@ const coreModel = {
   tables: { users: { pk: 'id', published: true, fields: { id: { type: 'bigint', serial: true }, name: { type: 'text' } } } }
 };
 
-const pkg = compile({ fragment, baseIri: BASE, slug: 'flotte' });
+const pkg = compile({ fragment, baseIri: BASE, slug: 'fleet' });
 const core = compile({ fragment: coreModel, baseIri: BASE, slug: null });
 const shapes = [...core.shapes, ...pkg.shapes]; // F4.1: both graphs when FK users present
 
 function dataDoc(node) {
   return {
     '@context': { ex: NS, core: CORE_NS, dcterms: 'http://purl.org/dc/terms/' },
-    '@id': BASE + 'apps/flotte/vehicules/1',
+    '@id': BASE + 'apps/fleet/vehicles/1',
     '@type': NS, // targetClass form (ns#); the served Camel form is also accepted (rev 4.1)
-    'ex:immatriculation': 'AA-111',
-    'ex:prix': 10.5,
-    'dcterms:description': { '@value': 'Camion benne', '@language': 'fr' },
+    'ex:registration': 'AA-111',
+    'ex:price': 10.5,
+    'dcterms:description': { '@value': 'Dump truck', '@language': 'en' },
     'ex:created_by': { '@id': BASE + 'users/7' }
   };
 }
@@ -58,17 +58,17 @@ test('C4: conformant data → sh:conforms true, empty results', () => {
 
 test('datatype violation → sh:DatatypeConstraintComponent with sh:value', () => {
   const doc = dataDoc();
-  doc['ex:prix'] = 'pas un nombre';
+  doc['ex:price'] = 'not a number';
   const rep = validate({ '@context': doc['@context'], '@graph': [doc] }, shapes);
   assert.strictEqual(rep['sh:conforms'], false);
   const r = rep['sh:result'].find(x => x['sh:sourceConstraintComponent']['@id'].endsWith('DatatypeConstraintComponent'));
   assert.ok(r, 'expected a datatype violation');
-  assert.strictEqual(r['sh:focusNode']['@id'], BASE + 'apps/flotte/vehicules/1');
+  assert.strictEqual(r['sh:focusNode']['@id'], BASE + 'apps/fleet/vehicles/1');
 });
 
 test('minCount violation (missing not_null field)', () => {
   const doc = dataDoc();
-  delete doc['ex:immatriculation'];
+  delete doc['ex:registration'];
   const rep = validate({ '@context': doc['@context'], '@graph': [doc] }, shapes);
   const r = rep['sh:result'].find(x => x['sh:sourceConstraintComponent']['@id'].endsWith('MinCountConstraintComponent'));
   assert.ok(r, 'expected a minCount violation');
@@ -76,7 +76,7 @@ test('minCount violation (missing not_null field)', () => {
 
 test('sh:in violation', () => {
   const doc = dataDoc();
-  doc['ex:immatriculation'] = 'ZZ-999';
+  doc['ex:registration'] = 'ZZ-999';
   const rep = validate({ '@context': doc['@context'], '@graph': [doc] }, shapes);
   assert.ok(rep['sh:result'].some(x => x['sh:sourceConstraintComponent']['@id'].endsWith('InConstraintComponent')));
 });
@@ -97,16 +97,16 @@ test('langString: plain literal on a lang field → datatype violation', () => {
 
 test('sh:class: FK pointing at a node of the wrong class → ClassConstraintComponent', () => {
   const vehicle = dataDoc();
-  const wrongUser = { '@id': BASE + 'users/7', '@type': NS + 'Store_flotte_vehicules' }; // not the users class
+  const wrongUser = { '@id': BASE + 'users/7', '@type': NS + 'Store_fleet_vehicles' }; // not the users class
   const rep = validate({ '@context': { ex: NS, core: CORE_NS, dcterms: 'http://purl.org/dc/terms/' }, '@graph': [vehicle, wrongUser] }, shapes);
   assert.ok(rep['sh:result'].some(x => x['sh:sourceConstraintComponent']['@id'].endsWith('ClassConstraintComponent')));
 });
 
 test('per-table endpoint: tableShapeIri restricts focus to that table shape', () => {
   const doc = dataDoc();
-  doc['ex:immatriculation'] = 'ZZ-999';
-  // validating only the vehicules shape still reports; a shape IRI of another table → no results
-  const repOther = validate({ '@context': doc['@context'], '@graph': [doc] }, shapes, { tableShapeIri: BASE + 'ns/app/store_flotte_garages#Shape' });
+  doc['ex:registration'] = 'ZZ-999';
+  // validating only the vehicles shape still reports; a shape IRI of another table → no results
+  const repOther = validate({ '@context': doc['@context'], '@graph': [doc] }, shapes, { tableShapeIri: BASE + 'ns/app/store_fleet_garages#Shape' });
   assert.strictEqual(repOther['sh:conforms'], true); // no focus nodes for that class
   const rep = validate({ '@context': doc['@context'], '@graph': [doc] }, shapes, { tableShapeIri: NS + 'Shape' });
   assert.strictEqual(rep['sh:conforms'], false);

@@ -11,13 +11,13 @@ spec:
   routes:
     - method: GET
       path: /shapes
-      summary: "SHACL contract of the core model (model.json). Content negotiation: JSON-LD (application/ld+json) by default — chantier 3 (app-ui-editor) fetches with res.json(); Turtle when Accept: text/turtle. JSON-LD form: inline sh:property objects, rdfs:label/sh:name as locale maps, sh:in as string array, sh:targetClass/sh:class as ns# class IRIs. ETag W/\"<sha256 of canonical Turtle>\", If-None-Match → 304. Auth: any authenticated pod user."
+      summary: "SHACL contract of the core model (model.json). Content negotiation: JSON-LD (application/ld+json) by default — workstream 3 (app-ui-editor) fetches with res.json(); Turtle when Accept: text/turtle. JSON-LD form: inline sh:property objects, rdfs:label/sh:name as locale maps, sh:in as string array, sh:targetClass/sh:class as ns# class IRIs. ETag W/\"<sha256 of canonical Turtle>\", If-None-Match → 304. Auth: any authenticated pod user."
     - method: GET
       path: /shapes/
-      summary: "Index of sources (core + packages, all states): { sources: [ { kind, slug, version, state, contract (URL), package, contractUri, fragmentUri, fragmentHash, supersedes, published, tables: [ { table, phys, label (locale map), published, count, fields[] } ] } ] }. tables[] = object registry (chantier 3 rev 8): ALL tables of the model, published or not, with the flag; revoked packages get tables: []. JSON-LD."
+      summary: "Index of sources (core + packages, all states): { sources: [ { kind, slug, version, state, contract (URL), package, contractUri, fragmentUri, fragmentHash, supersedes, published, tables: [ { table, phys, label (locale map), published, count, fields[] } ] } ] }. tables[] = object registry (workstream 3 rev 8): ALL tables of the model, published or not, with the flag; revoked packages get tables: []. JSON-LD."
     - method: GET
       path: /shapes/<table>
-      summary: "Single object shape of the CORE model: the NodeShape as JSON-LD with reg:published embedded (reg = <base>/ns/reg#). 404 unknown table. Chantier 3 rev 8 — 1 shape = 1 JSON = 1 object type."
+      summary: "Single object shape of the CORE model: the NodeShape as JSON-LD with reg:published embedded (reg = <base>/ns/reg#). 404 unknown table. Workstream 3 rev 8 — 1 shape = 1 JSON = 1 object type."
     - method: GET
       path: /fragment
       summary: "Core model.json (source of truth, read-only) + fragmentHash."
@@ -26,7 +26,7 @@ spec:
       summary: "SHACL contract of a package, published tables only (dsp.asset_mapping). 404 unknown slug / no published table, 410 revoked. ETag as /shapes. The compiled graph @id is the package contract IRI (/apps/<slug>/shapes)."
     - method: GET
       path: /apps/<slug>/shapes/<table>
-      summary: "Single object shape of a package: NodeShape as JSON-LD with reg:published embedded. 404 unknown table / no such package, 410 revoked. Chantier 3 rev 8."
+      summary: "Single object shape of a package: NodeShape as JSON-LD with reg:published embedded. 404 unknown table / no such package, 410 revoked. Workstream 3 rev 8."
     - method: GET
       path: /apps/<slug>/fragment
       summary: "Raw model_fragment + fragment_hash + state + supersedes. 404 unknown, 410 revoked."

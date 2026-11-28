@@ -22,10 +22,10 @@ const reserved = patterns.map((p) => new RegExp(p.slice(1, -1)));
 
 const servedPaths = [
   '/shapes', '/shapes/', '/shapes/tickets', '/fragment', '/shacl/preview',
-  '/apps/flotte/shapes', '/apps/flotte/shapes/vehicles', '/apps/flotte/fragment',
-  '/apps/flotte/validate', '/apps/flotte/vehicles/validate',
+  '/apps/fleet/shapes', '/apps/fleet/shapes/vehicles', '/apps/fleet/fragment',
+  '/apps/fleet/validate', '/apps/fleet/vehicles/validate',
 ];
-const ldpPaths = ['/buildings/', '/apps/flotte/vehicles/', '/apps/flotte/vehicles/42', '/tickets/'];
+const ldpPaths = ['/buildings/', '/apps/fleet/vehicles/', '/apps/fleet/vehicles/42', '/tickets/'];
 
 test('A.2 — every ext/shacl route pattern is present in the core LDP node and matches', () => {
   for (const p of patterns) assert.ok(core.includes(p), `core reserves pattern ${p}`);

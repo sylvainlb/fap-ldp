@@ -1,6 +1,6 @@
-# ext/shacl — compiled SHACL contracts (E5, chantiers 1–2 of `spec/app-shape-editor.md` rev 4)
+# ext/shacl — compiled SHACL contracts (E5, workstreams 1–2 of `spec/app-shape-editor.md` rev 4)
 
-The model fragment (DSL annexe A, injected by E11) and the core `model.json` remain the **only
+The model fragment (DSL appendix A, injected by E11) and the core `model.json` remain the **only
 sources of truth**. This extension **compiles** them into SHACL and publishes the result as an
 external contract, read-only. The SQL write path (CHECK, business rules, RLS) stays the only
 write authority — this ext adds **no** constraint to it and modifies **no** core/E11 behavior
@@ -18,11 +18,11 @@ write authority — this ext adds **no** constraint to it and modifies **no** co
 | Route | Content |
 |---|---|
 | `GET /shapes` | Core model contract — Turtle (JSON-LD on Accept), `ETag W/"<sha256>"`, 304 on If-None-Match (F3.2/F3.4) |
-| `GET /shapes/` | Index of all sources: core + packages, all states, contract/fragment URIs, hashes, `supersedes` (F3.6) — each source also carries **`tables[]`**: the object registry, ALL tables of the model with `{ table, phys, label (locale map), published, count, fields[] }` (chantier 3 rev 8; revoked packages get `tables: []`) |
-| `GET /shapes/<table>` | Single object shape (core), JSON-LD, `reg:published` embedded, 404 unknown table (chantier 3 rev 8) |
+| `GET /shapes/` | Index of all sources: core + packages, all states, contract/fragment URIs, hashes, `supersedes` (F3.6) — each source also carries **`tables[]`**: the object registry, ALL tables of the model with `{ table, phys, label (locale map), published, count, fields[] }` (workstream 3 rev 8; revoked packages get `tables: []`) |
+| `GET /shapes/<table>` | Single object shape (core), JSON-LD, `reg:published` embedded, 404 unknown table (workstream 3 rev 8) |
 | `GET /fragment` | Core `model.json` + hash (F3.5) |
 | `GET /apps/<slug>/shapes` | Package contract, **published tables only** (`dsp.asset_mapping`) — 404 no published table, 410 revoked (F3.3) |
-| `GET /apps/<slug>/shapes/<table>` | Single object shape of a package, JSON-LD, `reg:published`, 404/410 (chantier 3 rev 8) |
+| `GET /apps/<slug>/shapes/<table>` | Single object shape of a package, JSON-LD, `reg:published`, 404/410 (workstream 3 rev 8) |
 | `GET /apps/<slug>/fragment` | Raw `model_fragment` + `fragment_hash` + state + `supersedes` (F3.5) |
 | `POST /apps/<slug>/validate`, `POST /apps/<slug>/<table>/validate` | **J3**: validate an RDF/JSON-LD data graph against the contract; W3C `sh:ValidationReport` out, read-only (F4.1/C4) |
 
@@ -35,7 +35,7 @@ compiles, cache keyed by `fragment_hash`); E11 emits no install event and none i
   core `app.<table>` → `${base}/ns/app/<table>#<field>` — identical to the served JSON-LD context (R1.2/R1.3).
 - Mappings (F2.1): `text→xsd:string`, `bigint→xsd:integer`, `numeric→xsd:decimal`,
   `boolean→xsd:boolean`, `timestamptz→xsd:dateTime`, `not_null→sh:minCount 1`, `check_in→sh:in`,
-  `fk→sh:nodeKind sh:IRI + sh:class <core users shape>` (annexe A fk enum is `users` only),
+  `fk→sh:nodeKind sh:IRI + sh:class <core users shape>` (appendix A fk enum is `users` only),
   `node_kind: iri→sh:nodeKind sh:IRI`, `lang: true→rdf:langString`.
 - `align` / `align_class` accept full IRIs or prefixed forms (`geo:lat`, `dcterms:description`…)
   expanded via a fixed prefix map. `label_i18n` → `sh:name` (pivot `en`) + `rdfs:label` per locale (R1.1).
@@ -62,7 +62,7 @@ documented expectation F5.2 ("governed", not "incoherent").
 
 ## Dependencies before full activation
 
-- **J1**: annexe A v0.4 (semantic keys, `contract_exclude`, `supersedes`, reserved table names
+- **J1**: appendix A v0.4 (semantic keys, `contract_exclude`, `supersedes`, reserved table names
   `meta|shapes|validate|fragment`) — transverse agreement with the DSL spec owner. Until then,
   fragments carrying those keys are rejected `422 schema_violation` by E11; the compiler already
   handles them defensively.
@@ -70,13 +70,13 @@ documented expectation F5.2 ("governed", not "incoherent").
   `/shapes`, `/shapes/`, `/shapes/<table>`, `/fragment`, `/shacl/preview`,
   `/apps/<slug>/{shapes,shapes/<table>,validate,fragment}` and `/apps/<slug>/<table>/validate`.
 
-## Déploiement (ORCE)
+## Deployment (ORCE)
 
-- Package monté read-only : `../../fap-ldp/ext/shacl:/data/node_modules/node-red-contrib-fap-ldp-shacl:ro`
+- Package mounted read-only: `../../fap-ldp/ext/shacl:/data/node_modules/node-red-contrib-fap-ldp-shacl:ro`
   (compose `app-supervision-backend/compose/docker-compose.yml`).
-- Nœuds dans les flows seed : fragment `compose/flows/shacl.json`, assemblé par
-  `app-supervision-backend/scripts/assemble-flows.sh` → `.build/flows.json` (monté `/flows-app`,
-  recopié vers `/data/flows.json` à chaque boot par `orce-entrypoint.sh`).
-- Les deux nœuds **doivent avoir un bloc `<script type="text/html" data-template-name="…">`** dans leur
-  `.html` : c'est ce bloc qui enregistre le type dans la palette (sans lui, le module est scanné mais
-  ses types restent invisibles et les nœuds des flows sont supprimés au boot).
+- Nodes in the seed flows: fragment `compose/flows/shacl.json`, assembled by
+  `app-supervision-backend/scripts/assemble-flows.sh` → `.build/flows.json` (mounted `/flows-app`,
+  copied to `/data/flows.json` at each boot by `orce-entrypoint.sh`).
+- Both nodes **must have a block `<script type="text/html" data-template-name="…">`** in their
+  `.html`: it is this block that registers the type in the palette (without it, the module is scanned but
+  its types stay invisible and the flow nodes are deleted at boot).

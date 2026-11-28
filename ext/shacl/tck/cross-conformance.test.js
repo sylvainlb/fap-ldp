@@ -16,7 +16,7 @@ const model = JSON.parse(fs.readFileSync(MODEL, 'utf8'));
 const compiled = compile({ fragment: model, baseIri: BASE, slug: null, published: null }); // core: all tables
 
 const row = {
-  id: 482, title: 'Fuite chaufferie', description: '…', status: 'OPEN', priority: 'HIGH',
+  id: 482, title: 'Boiler room leak', description: '…', status: 'OPEN', priority: 'HIGH',
   building_id: 7, anomaly_ref: 'AN-2026-001', created_by: 1, assigned_to: null,
   created_at: '2026-11-20T10:00:00Z', updated_at: '2026-11-20T10:00:00Z', deleted_at: null
 };
@@ -29,7 +29,7 @@ test('F5.1: served JSON-LD row of every published core table conforms to the com
   for (const t of ['tickets', 'buildings', 'comments']) {
     const r = t === 'tickets' ? row : {
       id: 1, created_at: '2026-11-20T10:00:00Z', updated_at: '2026-11-20T10:00:00Z', deleted_at: null,
-      ...(t === 'buildings' ? { name: 'Bât A', address: '1 rue x', meter_id: 'M-1', facis_asset: 'A-1', lat: 48.85, lon: 2.35, area_m2: 120.5 } : { ticket_id: 482, author: 1, text: 'ok', ts: '2026-11-20T10:00:00Z' })
+      ...(t === 'buildings' ? { name: 'Building A', address: '1 Main St', meter_id: 'M-1', facis_asset: 'A-1', lat: 48.85, lon: 2.35, area_m2: 120.5 } : { ticket_id: 482, author: 1, text: 'ok', ts: '2026-11-20T10:00:00Z' })
     };
     const doc = servedDoc(t, r);
     const rep = validate(doc, compiled.shapes);
@@ -54,7 +54,7 @@ test('F5.2 (documented expectation): conformant but governed — status CLOSED v
   const doc = servedDoc('tickets', { ...row, status: 'CLOSED' });
   const rep = validate(doc, compiled.shapes);
   assert.strictEqual(rep['sh:conforms'], true); // CLOSED ∈ check_in → contract-conformant
-  // the write path rejects it (business rule, hors contrat R1.5) → classed "gouverned", not "incoherent"
+  // the write path rejects it (business rule, outside the contract R1.5) → classed "governed", not "incoherent"
 });
 
 test('F5.1: FK served as raw integer conforms (fk compiles to xsd:integer unless node_kind: iri)', () => {

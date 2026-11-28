@@ -1,4 +1,4 @@
-// chantier3-compat.test.mjs — the REAL chantier 3 contract reader (app-ui-editor/src/contract.js)
+// workstream3-compat.test.mjs — the REAL workstream 3 contract reader (app-ui-editor/src/contract.js)
 // must parse what ext/shacl really compiles. Run: node --test tck/
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { compile } = require('../nodes/lib/compiler.js');
 const { indexEntry } = require('../nodes/lib/store.js');
-// chantier 3 consumer (ESM)
+// workstream 3 consumer (ESM)
 const { parseContract, propertyByLocal, propertyByIri, isServiceIri } = await import(
   fileURLToPath(new URL('../../../../app-ui-editor/src/contract.js', import.meta.url)));
 
@@ -17,10 +17,10 @@ const BASE = 'https://pod.example/';
 const model = JSON.parse(readFileSync(
   fileURLToPath(new URL('../../../../app-supervision-backend/config/model.json', import.meta.url)), 'utf8'));
 
-test('chantier 3 parseContract reads the compiled CORE contract (demo model.json)', () => {
+test('workstream 3 parseContract reads the compiled CORE contract (demo model.json)', () => {
   const c = compile({ fragment: model, baseIri: BASE, slug: null, published: null });
   const m = parseContract(c.jsonld);
-  // ns# form, as the chantier 3 fixture expects; first NodeShape wins for classIri (sorted tables)
+  // ns# form, as the workstream 3 fixture expects; first NodeShape wins for classIri (sorted tables)
   assert.ok(m.classIri.startsWith(`${BASE}ns/app/`) && m.classIri.endsWith('#'));
   assert.ok(m.properties.length > 10); // all core tables' properties are in the model
   const title = propertyByLocal(m, 'title');
@@ -40,26 +40,26 @@ test('chantier 3 parseContract reads the compiled CORE contract (demo model.json
   assert.ok(propertyByIri(m, `${BASE}ns/app/tickets#due_date`) === undefined); // no such column here
 });
 
-test('chantier 3 parseContract reads a compiled PACKAGE contract (physical IRIs, align, lang, labels, fk-iri)', () => {
+test('workstream 3 parseContract reads a compiled PACKAGE contract (physical IRIs, align, lang, labels, fk-iri)', () => {
   const fragment = {
     tables: {
-      vehicules: {
+      vehicles: {
         pk: 'id', published: true,
         label_i18n: { en: 'Vehicle', fr: 'Véhicule' },
         fields: {
           id: { type: 'bigint', serial: true },
-          immatriculation: { type: 'text', not_null: true, check_in: ['AA', 'BB'], label_i18n: { en: 'Plate', fr: 'Plaque' } },
+          registration: { type: 'text', not_null: true, check_in: ['AA', 'BB'], label_i18n: { en: 'Plate', fr: 'Plaque' } },
           description: { type: 'text', lang: true, align: 'dcterms:description' },
           created_by: { type: 'bigint', fk: 'users', node_kind: 'iri' }
         }
       }
     }
   };
-  const c = compile({ fragment, baseIri: BASE, slug: 'flotte' });
+  const c = compile({ fragment, baseIri: BASE, slug: 'fleet' });
   const m = parseContract(c.jsonld);
-  assert.equal(m.classIri, `${BASE}ns/app/store_flotte_vehicules#`); // physical name (R1.2)
-  const imm = propertyByLocal(m, 'immatriculation');
-  assert.equal(imm.iri, `${BASE}ns/app/store_flotte_vehicules#immatriculation`);
+  assert.equal(m.classIri, `${BASE}ns/app/store_fleet_vehicles#`); // physical name (R1.2)
+  const imm = propertyByLocal(m, 'registration');
+  assert.equal(imm.iri, `${BASE}ns/app/store_fleet_vehicles#registration`);
   assert.equal(imm.minCount, 1);
   assert.deepEqual(imm.in, ['AA', 'BB']);
   assert.deepEqual(imm.label, { en: 'Plate', fr: 'Plaque' }); // localized map form
@@ -75,10 +75,10 @@ test('chantier 3 parseContract reads a compiled PACKAGE contract (physical IRIs,
   assert.deepEqual(shape['rdfs:label'], { en: 'Vehicle', fr: 'Véhicule' });
 });
 
-test('index entries carry the fields chantier 3 editor.js reads: contract + package', () => {
-  const pkg = indexEntry({ kind: 'package', slug: 'flotte', version: '1.0.0', state: 'installed', fragmentHash: 'h', supersedes: 'old@1.0.0', hasContract: true }, BASE);
-  assert.equal(pkg.contract, `${BASE}apps/flotte/shapes`);
-  assert.equal(pkg.package, '/apps/flotte/meta'); // editor derives contract URL from it
+test('index entries carry the fields workstream 3 editor.js reads: contract + package', () => {
+  const pkg = indexEntry({ kind: 'package', slug: 'fleet', version: '1.0.0', state: 'installed', fragmentHash: 'h', supersedes: 'old@1.0.0', hasContract: true }, BASE);
+  assert.equal(pkg.contract, `${BASE}apps/fleet/shapes`);
+  assert.equal(pkg.package, '/apps/fleet/meta'); // editor derives contract URL from it
   const core = indexEntry({ kind: 'core', slug: null, version: null, state: 'installed', fragmentHash: 'h', supersedes: null, hasContract: true }, BASE);
   assert.equal(core.contract, `${BASE}shapes`);
   assert.equal(core.package, null); // editor falls back to '/shapes'

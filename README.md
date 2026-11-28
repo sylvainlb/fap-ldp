@@ -13,7 +13,7 @@ the transactional `app.*` application domain, a single LDP/JSON-LD endpoint (gol
   (`../spec/supervision-energetique-spec-fonctionnelle.md`)
 
 FAP-LDP **does not modify** the FAP core: it depends on stable versioned seams, declared in
-`contracts/` (message envelope, bronze row contract, SQL transformations on named schemas
+`contracts/` (message enbikepe, bronze row contract, SQL transformations on named schemas
 `bronze`/`silver`/`gold`/`app`, `trino-read-api v1`, `dsp-control-plane-api v1`, DSP/LDP protocols).
 
 ## Repository contents (light monorepo layout, spec §4)

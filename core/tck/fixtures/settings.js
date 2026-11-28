@@ -12,6 +12,6 @@ module.exports = {
   httpNodeCors: { origin: '*' },
   credentialSecret: process.env.NODE_RED_CREDENTIAL_SECRET || 'fap-light-credential-secret',
   logging: {
-    console: { level: 'info', metrics: false, audit: false }
+    consumptionle: { level: 'info', metrics: false, audit: false }
   }
 };

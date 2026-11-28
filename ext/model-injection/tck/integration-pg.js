@@ -13,19 +13,19 @@ const { installPackage, revokePackage, applyFragmentsAtBoot } = require(path.joi
 const { FragmentError, compileFragment } = require(path.join(__dirname, '..', 'nodes', 'lib', 'fragment'));
 
 const DSN = process.env.PG_ADMIN_DSN;
-if (!DSN) { console.error('PG_ADMIN_DSN required'); process.exit(2); }
+if (!DSN) { consumptionle.error('PG_ADMIN_DSN required'); process.exit(2); }
 const BASE = process.env.BASE_IRI || 'http://localhost:18880/';
 const WEBID = 'https://supervision.example/users/1';
 
 const FRAGMENT = {
   tables: {
-    vehicules: {
+    vehicles: {
       pk: 'id', owner: 'created_by', published: true, tombstone: 'deleted_at', outbox: true,
       fields: {
         id: { type: 'bigint', serial: true },
-        immatriculation: { type: 'text', not_null: true, unique: true },
-        type: { type: 'text', check_in: ['voiture', 'camion', 'velo'] },
-        prix: { type: 'numeric' },
+        registration: { type: 'text', not_null: true, unique: true },
+        type: { type: 'text', check_in: ['car', 'truck', 'bike'] },
+        price: { type: 'numeric' },
         created_by: { type: 'bigint', fk: 'users' },
         created_at: { type: 'timestamptz', default: 'now()' },
         updated_at: { type: 'timestamptz', default: 'now()' },
@@ -48,8 +48,8 @@ const FRAGMENT2 = {
 
 let pass = 0, fail = 0;
 function ck(name, fn) {
-  return Promise.resolve().then(fn).then(() => { pass++; console.log('PASS', name); })
-    .catch(e => { fail++; console.log('FAIL', name, '-', e.message); });
+  return Promise.resolve().then(fn).then(() => { pass++; consumptionle.log('PASS', name); })
+    .catch(e => { fail++; consumptionle.log('FAIL', name, '-', e.message); });
 }
 
 async function main() {
@@ -61,7 +61,7 @@ async function main() {
     const sql = fs.readFileSync(path.join(__dirname, '..', 'sql', f), 'utf8');
     await q(sql);
   }
-  console.log('PASS migrations 000+001 applied');
+  consumptionle.log('PASS migrations 000+001 applied');
 
   // initial cleanup (tables left from a previous run + rows)
   await q("DELETE FROM app.app_packages WHERE slug LIKE 'mi_test_%'");
@@ -72,36 +72,36 @@ async function main() {
 
   await ck('AC-B1 valid install → 201-equivalent (tables/mapping/contract/ACL/row)', async () => {
     const out = await installPackage(pool, {
-      slug: 'mi_test_flotte', version: '1.0.0', meta: { title_i18n: { en: 'Fleet', fr: 'Flotte' } },
+      slug: 'mi_test_fleet', version: '1.0.0', meta: { title_i18n: { en: 'Fleet', fr: 'Flotte' } },
       model_fragment: FRAGMENT, webid: WEBID, baseIri: BASE
     });
-    assert.equal(out.tables[0], 'store_mi_test_flotte_vehicules');
-    assert.ok((await q("SELECT to_regclass('app.store_mi_test_flotte_vehicules')")).rows[0].to_regclass);
-    const m = await q("SELECT * FROM dsp.asset_mapping WHERE container_uri='/apps/mi_test_flotte/vehicules/'");
+    assert.equal(out.tables[0], 'store_mi_test_fleet_vehicles');
+    assert.ok((await q("SELECT to_regclass('app.store_mi_test_fleet_vehicles')")).rows[0].to_regclass);
+    const m = await q("SELECT * FROM dsp.asset_mapping WHERE container_uri='/apps/mi_test_fleet/vehicles/'");
     assert.equal(m.rows[0].published, true);
-    assert.equal(m.rows[0].table_name, 'store_mi_test_flotte_vehicules');
-    const acl = await q("SELECT subject, modes FROM auth.acl WHERE resource_uri=$1 ORDER BY subject", [BASE + 'apps/mi_test_flotte/']);
+    assert.equal(m.rows[0].table_name, 'store_mi_test_fleet_vehicles');
+    const acl = await q("SELECT subject, modes FROM auth.acl WHERE resource_uri=$1 ORDER BY subject", [BASE + 'apps/mi_test_fleet/']);
     assert.deepEqual(acl.rows.map(r => r.subject).sort(), ['role:admin', WEBID].sort());
     const c = await q("SELECT state FROM dsp.contracts WHERE agreement_id=$1", [out.agreement_id]);
     assert.equal(c.rows[0].state, 'active');
     // published → foaf:Agent read on the table container
-    const pub = await q("SELECT modes FROM auth.acl WHERE resource_uri=$1 AND subject='foaf:Agent'", [BASE + 'apps/mi_test_flotte/vehicules/']);
+    const pub = await q("SELECT modes FROM auth.acl WHERE resource_uri=$1 AND subject='foaf:Agent'", [BASE + 'apps/mi_test_fleet/vehicles/']);
     assert.equal(pub.rows[0].modes.join(','), 'read');
   });
 
   await ck('AC-B8 POST same slug → 409 Conflict', async () => {
     await assert.rejects(
-      installPackage(pool, { slug: 'mi_test_flotte', version: '1.0.1', model_fragment: FRAGMENT, webid: WEBID, baseIri: BASE }),
+      installPackage(pool, { slug: 'mi_test_fleet', version: '1.0.1', model_fragment: FRAGMENT, webid: WEBID, baseIri: BASE }),
       e => e.status === 409);
   });
 
   await ck('AC-B2 invalid fragment → 422 schema_violation, nothing applied', async () => {
     const bad = JSON.parse(JSON.stringify(FRAGMENT));
-    bad.tables.vehicules.fields.prix = { type: 'regclass' };
+    bad.tables.vehicles.fields.price = { type: 'regclass' };
     await assert.rejects(
       installPackage(pool, { slug: 'mi_test_bad', version: '1.0.0', model_fragment: bad, webid: WEBID, baseIri: BASE }),
       e => e instanceof FragmentError && e.code === 'schema_violation');
-    assert.equal((await q("SELECT to_regclass('app.store_mi_test_bad_vehicules')")).rows[0].to_regclass, null);
+    assert.equal((await q("SELECT to_regclass('app.store_mi_test_bad_vehicles')")).rows[0].to_regclass, null);
     assert.equal((await q("SELECT count(*)::int AS n FROM app.app_packages WHERE slug='mi_test_bad'")).rows[0].n, 0);
   });
 
@@ -119,10 +119,10 @@ async function main() {
   });
 
   await ck('AC-B5 write → outbox + versioning (RG-3)', async () => {
-    await q("INSERT INTO app.store_mi_test_flotte_vehicules (immatriculation, type, created_by) VALUES ('AA-123-BB','voiture',1)");
-    const ob = await q("SELECT event_type FROM app.outbox WHERE event_type LIKE 'store_mi_test_flotte_vehicules.%' ORDER BY id DESC LIMIT 1");
-    assert.equal(ob.rows[0].event_type, 'store_mi_test_flotte_vehicules.insert');
-    const v = await q("SELECT count(*)::int AS n FROM app.versions WHERE table_name='store_mi_test_flotte_vehicules'");
+    await q("INSERT INTO app.store_mi_test_fleet_vehicles (registration, type, created_by) VALUES ('AA-123-BB','car',1)");
+    const ob = await q("SELECT event_type FROM app.outbox WHERE event_type LIKE 'store_mi_test_fleet_vehicles.%' ORDER BY id DESC LIMIT 1");
+    assert.equal(ob.rows[0].event_type, 'store_mi_test_fleet_vehicles.insert');
+    const v = await q("SELECT count(*)::int AS n FROM app.versions WHERE table_name='store_mi_test_fleet_vehicles'");
     assert.ok(v.rows[0].n >= 1);
   });
 
@@ -151,26 +151,26 @@ async function main() {
       await c.query("SELECT set_config('app.base_iri', $1, true)", [BASE]);
       await c.query('SET ROLE app');
       await c.query("SELECT set_config('app.webid', 'https://autre.example/users/1', true)");
-      const pub = await c.query('SELECT count(*)::int AS n FROM app.store_mi_test_flotte_vehicules');
+      const pub = await c.query('SELECT count(*)::int AS n FROM app.store_mi_test_fleet_vehicles');
       assert.ok(pub.rows[0].n >= 1, 'foaf:Agent reads the published table');
     } finally { await c.query('ROLLBACK').catch(() => {}); c.release(); }
   });
 
   await ck('idempotent boot: reapplication without error, no drift (negative AC-B7)', async () => {
     const r = await applyFragmentsAtBoot(pool, BASE, () => {});
-    assert.ok(r.applied.includes('mi_test_flotte'));
+    assert.ok(r.applied.includes('mi_test_fleet'));
     assert.deepEqual(r.drifted, []);
   });
 
   await ck('AC-B7 drift: column added by hand → drift state + alarm', async () => {
-    await q('ALTER TABLE app.store_mi_test_flotte_vehicules ADD COLUMN hack_col text');
+    await q('ALTER TABLE app.store_mi_test_fleet_vehicles ADD COLUMN hack_col text');
     const alarms = [];
     const r = await applyFragmentsAtBoot(pool, BASE, m => alarms.push(m));
-    assert.ok(r.drifted.includes('mi_test_flotte'), 'drift detected');
+    assert.ok(r.drifted.includes('mi_test_fleet'), 'drift detected');
     assert.ok(alarms.length >= 1, 'alarm logged');
-    const st = await q("SELECT state FROM app.app_packages WHERE slug='mi_test_flotte'");
+    const st = await q("SELECT state FROM app.app_packages WHERE slug='mi_test_fleet'");
     assert.equal(st.rows[0].state, 'drift');
-    await q('ALTER TABLE app.store_mi_test_flotte_vehicules DROP COLUMN hack_col');
+    await q('ALTER TABLE app.store_mi_test_fleet_vehicles DROP COLUMN hack_col');
     const r2 = await applyFragmentsAtBoot(pool, BASE, () => {});
     assert.deepEqual(r2.drifted, [], 'clean reboot after fix → back to installed');
   });
@@ -205,8 +205,8 @@ async function main() {
   await q("DELETE FROM dsp.contracts WHERE agreement_id LIKE 'agr-mi-mi_test_%'");
   await q("DELETE FROM dsp.audit WHERE resource_uri LIKE '/apps/mi_test_%'");
   await pool.end();
-  console.log(`== ${pass} PASS, ${fail} FAIL ==`);
+  consumptionle.log(`== ${pass} PASS, ${fail} FAIL ==`);
   process.exit(fail ? 1 : 0);
 }
 
-main().catch(e => { console.error('FATAL ERROR', e); process.exit(1); });
+main().catch(e => { consumptionle.error('FATAL ERROR', e); process.exit(1); });

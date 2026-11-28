@@ -53,9 +53,9 @@ function camel(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // Core model.json dialect: fields are SQL-ish strings ("text not null",
 // "text default 'OPEN' check in ('OPEN','CLOSED')", "bigint fk users(id)", "bigserial").
-// E11 fragments (annexe A v0.4) use structured objects. normalizeField accepts both.
+// E11 fragments (appendix A v0.4) use structured objects. normalizeField accepts both.
 function parseCoreField(def) {
-  if (typeof def !== 'string') return def; // already structured (annexe A)
+  if (typeof def !== 'string') return def; // already structured (appendix A)
   let d = def.trim();
   const out = {};
   const chk = d.match(/^(.*?)\bcheck\s+in\s*\((.*)\)$/i);
@@ -106,7 +106,7 @@ function compile(opts) {
     const shape = {
       iri: ns + 'Shape',
       // R1.3: default class IRI = the namespace itself (trailing '#', empty local part) — the
-      // form expected by chantier 3 contract.js. The served @type is ns#Camel(phys); the
+      // form expected by workstream 3 contract.js. The served @type is ns#Camel(phys); the
       // validator accepts both forms when matching focus nodes (rev 4.1).
       targetClass: table.align_class ? expandIri(table.align_class) : ns,
       name: labelOf(table.label_i18n, t),
@@ -129,9 +129,9 @@ function compile(opts) {
         labels: labelsOf(fd.label_i18n),
         datatype: fd.lang === true ? 'rdf:langString' : XSD[fd.type], // F2.1
         minCount: fd.not_null ? 1 : null, // F2.1: not null → sh:minCount 1
-        in: Array.isArray(fd.check_in) && fd.check_in.length ? fd.check_in.slice() : null, // sh:in, original order (chantier 3); sorted only in Turtle output
+        in: Array.isArray(fd.check_in) && fd.check_in.length ? fd.check_in.slice() : null, // sh:in, original order (workstream 3); sorted only in Turtle output
         nodeKind: iriRef ? 'sh:IRI' : null,
-        // chantier 3 contract.js expects sh:class = the target CLASS IRI (trailing '#'),
+        // workstream 3 contract.js expects sh:class = the target CLASS IRI (trailing '#'),
         // e.g. https://<pod>/ns/app/users# — not the shape IRI
         class: (iriRef && fkTarget) ? `${baseIri}ns/app/${fkTarget}#` : null
       };
@@ -182,7 +182,7 @@ function toTurtle(shapes) {
   return out.join('\n');
 }
 
-// JSON-LD serialization consumed by chantier 3 (app-ui-editor/src/contract.js):
+// JSON-LD serialization consumed by workstream 3 (app-ui-editor/src/contract.js):
 // - sh:property = INLINE property-shape objects (not @id refs)
 // - sh:name / rdfs:label = localized maps { "en": …, "fr": … }
 // - sh:in = plain array of strings ; sh:datatype / sh:nodeKind = prefixed forms (expanded via @context)
