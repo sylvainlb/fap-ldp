@@ -137,6 +137,7 @@ function createStore({ pool, modelPath }) {
         phys,                                        // R1.2: physical PG name
         label: toMap(sh.labels, sh.name),            // localized map { en, fr? }
         published: publishedSet.has(logical),
+        internal: !!(fragment.tables?.[logical]?.internal), // rev 4.5: system table of the server itself
         count: sh.properties.length,                 // number of contract fields
         fields: sh.properties.map((p) => toMap(p.labels, p.name)), // localized field labels
       };

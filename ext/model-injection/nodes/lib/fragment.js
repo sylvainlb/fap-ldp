@@ -15,7 +15,9 @@ const TABLE_KEYS = new Set(['pk', 'owner', 'published', 'tombstone', 'outbox', '
   'align_class', 'label_i18n', 'contract_exclude']);
 const FIELD_KEYS = new Set(['type', 'serial', 'not_null', 'unique', 'default', 'check_in', 'fk',
   // v0.4: semantic profile keys, consumed by ext/shacl only
-  'node_kind', 'lang', 'align', 'label_i18n']);
+  'node_kind', 'lang', 'align', 'label_i18n',
+  // v0.6 (app-shape-editor rev 4.13, annexe A): display-only description, consumed by the model registry UI
+  'description_i18n']);
 const ROOT_KEYS = new Set(['tables', 'supersedes']); // v0.4: supersedes (R1.6) = "<slug>@<version>"
 // v0.4/A.2: table names colliding with routes reserved by the core for ext/shacl + E11
 const RESERVED_TABLES = new Set(['meta', 'shapes', 'validate', 'fragment']);
@@ -44,15 +46,15 @@ function physicalTable(slug, table) { return 'store_' + slug + '_' + table; }
 // ---------- validation (annex A + §4 rules) ----------
 
 // v0.4/R1.1: label_i18n = locales object, pivot "en" mandatory when the key is present
-function validateLabelI18n(v, where) {
+function validateLabelI18n(v, where, key = 'label_i18n') {
   if (!v || typeof v !== 'object' || Array.isArray(v))
-    throw new FragmentError('schema_violation', `${where}: label_i18n must be an object of locales`);
+    throw new FragmentError('schema_violation', `${where}: ${key} must be an object of locales`);
   const keys = Object.keys(v);
-  if (keys.length < 1) throw new FragmentError('schema_violation', `${where}: label_i18n empty`);
-  if (!('en' in v)) throw new FragmentError('schema_violation', `${where}: label_i18n requires the pivot key "en" (R1.1)`);
+  if (keys.length < 1) throw new FragmentError('schema_violation', `${where}: ${key} empty`);
+  if (!('en' in v)) throw new FragmentError('schema_violation', `${where}: ${key} requires the pivot key "en" (R1.1)`);
   for (const k of keys) {
     if (!LOCALE_RE.test(k)) throw new FragmentError('schema_violation', `${where}: invalid locale key "${k}"`);
-    if (typeof v[k] !== 'string' || !v[k]) throw new FragmentError('schema_violation', `${where}: label_i18n.${k} must be a non-empty string`);
+    if (typeof v[k] !== 'string' || !v[k]) throw new FragmentError('schema_violation', `${where}: ${key}.${k} must be a non-empty string`);
   }
 }
 
@@ -151,6 +153,8 @@ function validateFragment(fragment, rawBytes) {
       if (f.align !== undefined && (typeof f.align !== 'string' || !IRI_RE.test(f.align)))
         throw new FragmentError('schema_violation', `field ${tName}.${fName}: align must be an IRI (or prefixed form)`);
       if (f.label_i18n !== undefined) validateLabelI18n(f.label_i18n, `field ${tName}.${fName}`);
+      // v0.6: description_i18n follows the exact same locales rules as label_i18n (annexe A v0.6)
+      if (f.description_i18n !== undefined) validateLabelI18n(f.description_i18n, `field ${tName}.${fName}`, 'description_i18n');
     }
 
     // v0.4: contract_exclude entries must name existing fields of this table

@@ -92,3 +92,19 @@ test('v0.4 DDL-safety: compileFragment emits identical SQL with and without anno
   const ann = compileFragment('fleet', annotated);
   assert.deepStrictEqual(ann, plain); // semantic keys never reach the DDL
 });
+
+test('v0.6 (annexe A, app-shape-editor rev 4.13): description_i18n accepted, en pivot mandatory, no hash/DDL effect', () => {
+  const frag = base();
+  frag.tables.vehicles.fields.registration.description_i18n = { en: 'Registration plate', fr: 'Plaque' };
+  validateFragment(frag); // must not throw
+  const annotated = base();
+  annotated.tables.vehicles.fields.registration.description_i18n = { en: 'Registration plate', fr: 'Plaque' };
+  assert.strictEqual(fragmentHash(annotated), fragmentHash(base())); // display-only → excluded from drift hash
+  assert.deepStrictEqual(compileFragment('fleet', annotated), compileFragment('fleet', base())); // no DDL effect
+  const bad = base();
+  bad.tables.vehicles.fields.registration.description_i18n = { fr: 'Sans pivot' };
+  assert.throws(() => validateFragment(bad), /description_i18n requires the pivot key "en"/);
+  const badKey = base();
+  badKey.tables.vehicles.fields.registration.description_i18n = 'not an object';
+  assert.throws(() => validateFragment(badKey), /description_i18n must be an object of locales/);
+});

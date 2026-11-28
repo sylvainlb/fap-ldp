@@ -110,3 +110,17 @@ test('published contract unchanged: only published tables appear in it (R1.4/F3.
   const targets = shapes.map((s) => s['sh:targetClass']?.['@id'] ?? s['sh:targetClass']).sort();
   assert.deepEqual(targets, [`${BASE}ns/app/buildings#`, `${BASE}ns/app/tickets#`], 'contract = published tables only');
 });
+
+test('rev 4.5 — tables[] carries the internal flag (system tables of the server itself)', async () => {
+  const idx = await store.index(BASE);
+  const core = idx.sources.find((s) => s.kind === 'core');
+  const t = Object.fromEntries(core.tables.map((x) => [x.table, x]));
+  assert.equal(t.components.internal, true, 'components = system table');
+  assert.equal(t.ai_models.internal, true, 'ai_models = system table');
+  assert.equal(t.user_components.internal, true, 'user_components = system table');
+  assert.equal(t.buildings.internal, false, 'business table is not internal');
+  assert.equal(t.users.internal, false, 'users is business (unpublished), not system');
+  // package side: no internal key → false
+  const pkg = idx.sources.find((s) => s.slug === 'fleet');
+  assert.equal(pkg.tables[0].internal, false);
+});
